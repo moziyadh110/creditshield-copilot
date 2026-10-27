@@ -1,5 +1,10 @@
-import mlflow
-import pytest
+import os
+
+# Before mlflow is imported: see evals/__init__.py (telemetry thread vs import lock).
+os.environ.setdefault("MLFLOW_DISABLE_TELEMETRY", "true")
+
+import mlflow  # noqa: E402
+import pytest  # noqa: E402
 
 
 @pytest.fixture(autouse=True, scope="session")

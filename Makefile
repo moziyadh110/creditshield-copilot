@@ -1,5 +1,5 @@
 # Each target is a thin wrapper: on Windows without make, run the uv command directly.
-.PHONY: db mlflow migrate prompts fetch-regb ingest draft test lint
+.PHONY: db mlflow migrate prompts fetch-regb ingest draft eval eval-cases check promote rollback test lint
 
 db:
 	docker compose up -d --wait db
@@ -23,6 +23,24 @@ ingest:
 
 draft:
 	uv run copilot draft --applicant $(APPLICANT)
+
+# PROMPT is a version number or alias; MODE is e2e, generation or both.
+PROMPT ?= candidate
+MODE ?= both
+eval:
+	uv run python -m evals.runner --prompt $(PROMPT) --mode $(MODE)
+
+eval-cases:
+	uv run python -m evals.build_cases
+
+check:
+	uv run python -m app.llmops.gate check $(PROMPT)
+
+promote:
+	uv run python -m app.llmops.gate promote $(VERSION)
+
+rollback:
+	uv run python -m app.llmops.gate rollback
 
 test:
 	uv run pytest
