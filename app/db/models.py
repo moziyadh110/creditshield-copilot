@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import JSON, BigInteger, DateTime, Float, Integer, String, Text, func
+from sqlalchemy import JSON, BigInteger, DateTime, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 # BAAI/bge-small-en-v1.5 output size. Changing the embedding model means a new migration.
@@ -54,3 +54,23 @@ class RunLog(Base):
     latency_ms: Mapped[int] = mapped_column(Integer)
     trace_id: Mapped[str | None] = mapped_column(String(64), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ReviewItem(Base):
+    """A case a person must handle: escalated, blocked by a check, or a tool failure.
+    Nothing in this queue is ever sent automatically."""
+
+    __tablename__ = "review_queue"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    applicant_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    decision: Mapped[str] = mapped_column(String(16))
+    reason: Mapped[str] = mapped_column(Text)
+    check_results: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
+    draft: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    run_id: Mapped[int | None] = mapped_column(ForeignKey("run_log.id"))
+    trace_id: Mapped[str | None] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(16), server_default="pending", index=True)
+    reviewer_note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

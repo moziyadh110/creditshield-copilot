@@ -26,7 +26,8 @@ def _print_result(r) -> None:
         f"LLM calls {u.calls}  |  tokens {u.prompt_tokens} in / {u.completion_tokens} out  |  "
         f"cost ${u.cost_usd:.5f}  |  {r.latency_ms} ms"
     )
-    print(f"Run log id {r.run_id}  |  MLflow trace {r.trace_id}")
+    queued = f"  |  review queue id {r.review_id}" if r.review_id else ""
+    print(f"Run log id {r.run_id}  |  MLflow trace {r.trace_id}{queued}")
 
 
 def main() -> None:
