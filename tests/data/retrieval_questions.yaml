@@ -1,0 +1,22 @@
+# Retrieval test set: each question names the one chunk that answers it.
+# Written before the first retrieval run; target is >= 9 of 10 in the top 3.
+- question: How many days does a lender have to notify an applicant after adverse action on a completed application?
+  expected: 1002.9(a)(1)
+- question: What has to be included in a written notice when credit is denied?
+  expected: 1002.9(a)(2)
+- question: What wording must the ECOA anti-discrimination statement use?
+  expected: 1002.9(b)(1)
+- question: Is it enough to tell the applicant they did not reach the qualifying score on our scoring system?
+  expected: 1002.9(b)(2)
+- question: When two people apply together, who has to receive the notice?
+  expected: 1002.9(f)
+- question: Who sends the notice when a dealer or broker submitted the application for the applicant?
+  expected: 1002.9(g)
+- question: Does the notice need to explain how or why a factor hurt the application?
+  expected: 1002-appC-instr-4
+- question: Sample checklist of principal reasons for credit denial
+  expected: 1002-appC-C-1
+- question: Sample denial letter for an application processed by a credit scoring system
+  expected: 1002-appC-C-3
+- question: Sample letter telling the applicant they can ask for the specific reasons for the denial
+  expected: 1002-appC-C-5
