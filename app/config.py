@@ -10,6 +10,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 ROOT_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT_DIR / "data"
 
+# USD per 1M tokens at DeepSeek's PEAK rate (off-peak is half), from
+# https://api-docs.deepseek.com/quick_start/pricing/ on 2026-10-27. Peak never under-reports.
+# MLflow's own pricing (LiteLLM's table) doesn't know these models, so cost is computed here.
+LLM_PRICES_USD_PER_M = {
+    "deepseek-flash": {"input_cache_hit": 0.006, "input_cache_miss": 0.30, "output": 1.20},
+    "deepseek-v4-pro": {"input_cache_hit": 0.044, "input_cache_miss": 1.32, "output": 3.96},
+}
+
 
 class Settings(BaseSettings):
     # Blank values in .env (e.g. DAILY_BUDGET_USD=) fall back to the defaults below.
@@ -24,6 +32,8 @@ class Settings(BaseSettings):
     llm_base_url: str = "https://api.deepseek.com"
     llm_temperature: float = 0.0
     deepseek_api_key: SecretStr | None = None
+    llm_api_key: SecretStr | None = None  # for providers other than DeepSeek
+    llm_timeout_s: float = 60.0
 
     embedding_model: str = "BAAI/bge-small-en-v1.5"
 
@@ -35,6 +45,9 @@ class Settings(BaseSettings):
     creditshield_api_key: SecretStr | None = None
 
     mlflow_tracking_uri: str = "http://localhost:5001"
+    mlflow_experiment: str = "creditshield-copilot"
+    prompt_name: str = "notice-reasons"
+    prompt_alias: str = "production"  # "candidate" during eval
 
     # None means no cap; cost is still logged on every run.
     daily_budget_usd: float | None = None
