@@ -1,0 +1,23 @@
+# Secrets
+.env
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# MLflow local stores
+mlruns/
+mlflow.db
+
+# Data and model caches (data/denials.parquet and data/regb/ are committed)
+data/cache/
+.cache/
+
+# Editors and OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

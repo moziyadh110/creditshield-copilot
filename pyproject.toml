@@ -1,0 +1,40 @@
+[project]
+name = "creditshield-copilot"
+version = "0.1.0"
+description = "Plain-language adverse action notices for CreditShield denials, with rule-based guardrails."
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "alembic>=1.20.1",
+    "httpx>=0.28.1",
+    "pandas>=3.1.0",
+    "pgvector>=0.5.1",
+    "psycopg[binary]>=3.3.6",
+    "pyarrow>=26.0.0",
+    "pydantic-settings>=2.16.1",
+    "pyyaml>=6.0.3",
+    "sentence-transformers>=6.2.0",
+    "sqlalchemy>=2.1.6",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+
+[tool.ruff.lint.isort]
+# The local alembic/ folder holds migrations; the import is the installed package.
+known-third-party = ["alembic"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.7.0",
+    "pytest>=9.1.1",
+    "ruff>=0.17.2",
+]
