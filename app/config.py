@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://copilot:copilot@localhost:5433/copilot"
 
     llm_provider: Literal["deepseek", "openai", "anthropic", "ollama"] = "deepseek"
-    llm_model: str = "deepseek-chat"
+    llm_model: str = "deepseek-flash"
     llm_base_url: str = "https://api.deepseek.com"
     llm_temperature: float = 0.0
     deepseek_api_key: SecretStr | None = None
