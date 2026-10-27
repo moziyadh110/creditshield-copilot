@@ -21,3 +21,6 @@ data/cache/
 .idea/
 Thumbs.db
 .DS_Store
+
+# MLflow server artifacts (tracking metadata lives in Postgres)
+mlartifacts/

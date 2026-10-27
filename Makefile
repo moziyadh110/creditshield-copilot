@@ -1,17 +1,28 @@
 # Each target is a thin wrapper: on Windows without make, run the uv command directly.
-.PHONY: db migrate fetch-regb ingest test lint
+.PHONY: db mlflow migrate prompts fetch-regb ingest draft test lint
 
 db:
 	docker compose up -d --wait db
 
+# MLflow UI on http://localhost:5001. psycopg2 is named explicitly: SQLAlchemy 2.1 defaults
+# postgresql:// to psycopg 3, which breaks MLflow's prompt-version lookups.
+mlflow:
+	uv run mlflow server --backend-store-uri postgresql+psycopg2://copilot:copilot@localhost:5433/mlflow --artifacts-destination ./mlartifacts --host 127.0.0.1 --port 5001
+
 migrate:
 	uv run alembic upgrade head
+
+prompts:
+	uv run python -m app.llmops.prompts
 
 fetch-regb:
 	uv run python -m app.retrieval.fetch_regb
 
 ingest:
 	uv run python -m app.retrieval.ingest
+
+draft:
+	uv run copilot draft --applicant $(APPLICANT)
 
 test:
 	uv run pytest
