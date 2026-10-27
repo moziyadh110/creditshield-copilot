@@ -46,6 +46,8 @@ class Settings(BaseSettings):
 
     mlflow_tracking_uri: str = "http://localhost:5001"
     mlflow_experiment: str = "creditshield-copilot"
+    # Eval runs and their traces live apart, so monitoring never counts eval traffic.
+    mlflow_eval_experiment: str = "creditshield-copilot-eval"
     prompt_name: str = "notice-reasons"
     prompt_alias: str = "production"  # "candidate" during eval
 

@@ -2,7 +2,8 @@
 
 Each app/agent/prompts/<name>/v<n>.yaml becomes a registry version only if its template or
 model config differs from the latest registered version, so re-running is a no-op. The first
-version registered gets @production when no @production alias exists yet.
+version registered gets @production when no @production alias exists yet; a newer version gets
+@candidate, and only the release gate (app/llmops/gate.py) can make it @production.
 """
 
 from pathlib import Path
@@ -61,6 +62,12 @@ def register(name: str) -> list[int]:
         first = registered[0] if registered else 1
         mlflow.genai.set_prompt_alias(name, alias="production", version=first)
         print(f"set {name}@production -> version {first}")
+    # The newest version is what the eval and the release gate look at next.
+    if registered and registered[-1] != int(
+        mlflow.genai.load_prompt(f"prompts:/{name}@production", link_to_model=False).version
+    ):
+        mlflow.genai.set_prompt_alias(name, alias="candidate", version=registered[-1])
+        print(f"set {name}@candidate -> version {registered[-1]}")
     if not registered:
         print(f"{name}: no changes, nothing registered")
     return registered
