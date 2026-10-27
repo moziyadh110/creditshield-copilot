@@ -1,0 +1,300 @@
+# Reason catalog for every CreditShield model feature (FEATURE_COLS in
+# fair-lend-ml models/train_baseline.py, v1.1.0: 34 features).
+#
+# Keyed on the FEATURE NAME. CreditShield's RC01-RC04 are ranks (RC01 = the
+# top reason for that applicant), not stable codes, so they are never used
+# here. `code` is this project's own stable code per feature.
+#
+# Fields:
+#   code      stable code, CS01-CS34 in FEATURE_COLS order
+#   source    bureau = credit accounts with other lenders (credit bureau);
+#             history = previous loans and applications with us;
+#             application = the current application
+#   reason    plain-language principal reason, worded after Reg B Appendix C
+#             (sample form C-1) where a matching reason exists. A reason is
+#             only listed when its SHAP value pushed toward denial, so each
+#             wording states the adverse direction.
+#   banned    wordings a draft must not use for this feature (case-insensitive)
+#   escalate  true = never worded by the LLM; the case goes to human review
+#   sensitive true = close to a protected attribute; worded only as `reason`
+#
+# age_years is deliberately absent: age is not a model input, and CreditShield's
+# old age_years -> "Limited credit history length" mapping disguises age as
+# credit history. Any reason feature not listed here makes the case invalid.
+
+version: 1
+
+features:
+  years_employed:
+    code: CS01
+    source: application
+    reason: Length of employment
+    banned: [age, young, old, retire, too new, job-hopping]
+    escalate: false
+    sensitive: true
+
+  amt_income_total:
+    code: CS02
+    source: application
+    reason: Income insufficient for amount of credit requested
+    banned: [public assistance, benefits, welfare, unemployed]
+    escalate: false
+    sensitive: false
+
+  amt_credit:
+    code: CS03
+    source: application
+    reason: Amount of credit requested is too high
+    banned: [income too low]
+    escalate: false
+    sensitive: false
+
+  amt_annuity:
+    code: CS04
+    source: application
+    reason: Required loan payment amount is too high
+    banned: [income too low]
+    escalate: false
+    sensitive: false
+
+  credit_income_ratio:
+    code: CS05
+    source: application
+    reason: Amount of credit requested is high relative to income
+    banned: [public assistance, benefits]
+    escalate: false
+    sensitive: false
+
+  annuity_income_ratio:
+    code: CS06
+    source: application
+    reason: Required loan payments are high relative to income
+    banned: [public assistance, benefits]
+    escalate: false
+    sensitive: false
+
+  goods_to_credit_ratio:
+    code: CS07
+    source: application
+    reason: Amount of credit requested relative to the price of the goods being financed
+    banned: [collateral, down payment]
+    escalate: false
+    sensitive: false
+
+  owns_car:
+    code: CS08
+    source: application
+    reason: No vehicle owned
+    banned: [collateral, repossess]
+    escalate: false
+    sensitive: false
+
+  owns_realty:
+    code: CS09
+    source: application
+    reason: No real estate owned
+    banned: [collateral, homeless, renter]
+    escalate: false
+    sensitive: false
+
+  # Number of children: Reg B 1002.6(b)(3) bars assumptions about childbearing
+  # or child-rearing. Never worded by the LLM; always goes to human review.
+  cnt_children:
+    code: CS10
+    source: application
+    reason: null
+    banned: [child, children, dependents, family size, household size, kids]
+    escalate: true
+    sensitive: true
+
+  bureau_loan_count:
+    code: CS11
+    source: bureau
+    reason: Number of credit accounts with other lenders
+    banned: [with us, our records]
+    escalate: false
+    sensitive: false
+
+  active_loans:
+    code: CS12
+    source: bureau
+    reason: Number of currently active credit accounts with other lenders
+    banned: [with us, our records]
+    escalate: false
+    sensitive: false
+
+  closed_loans:
+    code: CS13
+    source: bureau
+    reason: Limited history of closed credit accounts with other lenders
+    banned: [with us, our records, credit history length]
+    escalate: false
+    sensitive: false
+
+  avg_days_overdue:
+    code: CS14
+    source: bureau
+    reason: Delinquent past or present credit obligations with others
+    banned: [with us, our records]
+    escalate: false
+    sensitive: false
+
+  max_days_overdue:
+    code: CS15
+    source: bureau
+    reason: Serious delinquency on a credit account with others
+    banned: [with us, our records, bankruptcy, collection action]
+    escalate: false
+    sensitive: false
+
+  bureau_debt_ratio:
+    code: CS16
+    source: bureau
+    reason: Amount owed on credit accounts with others is high relative to their credit limits
+    banned: [with us, our records]
+    escalate: false
+    sensitive: false
+
+  total_bureau_credit:
+    code: CS17
+    source: bureau
+    reason: Excessive obligations with other lenders
+    banned: [with us, our records]
+    escalate: false
+    sensitive: false
+
+  prev_app_count:
+    code: CS18
+    source: history
+    reason: Number of previous credit applications with us
+    banned: [credit bureau, other lenders, recent inquiries]
+    escalate: false
+    sensitive: false
+
+  prev_approved:
+    code: CS19
+    source: history
+    reason: Limited history of approved credit with us
+    banned: [credit bureau, other lenders]
+    escalate: false
+    sensitive: false
+
+  prev_refused:
+    code: CS20
+    source: history
+    reason: Previous credit applications with us were declined
+    banned: [credit bureau, other lenders]
+    escalate: false
+    sensitive: false
+
+  credit_application_ratio:
+    code: CS21
+    source: history
+    reason: Credit granted on previous applications with us differed from the amounts requested
+    banned: [credit bureau, other lenders]
+    escalate: false
+    sensitive: false
+
+  late_payments:
+    code: CS22
+    source: history
+    reason: Number of late payments on previous loans with us
+    banned: [credit bureau, other lenders, bankruptcy]
+    escalate: false
+    sensitive: false
+
+  avg_days_late:
+    code: CS23
+    source: history
+    reason: Payments on previous loans with us were made late on average
+    banned: [credit bureau, other lenders]
+    escalate: false
+    sensitive: false
+
+  payment_volatility:
+    code: CS24
+    source: history
+    reason: Inconsistent payment amounts on previous loans with us
+    banned: [credit bureau, other lenders]
+    escalate: false
+    sensitive: false
+
+  total_installments:
+    code: CS25
+    source: history
+    reason: Limited repayment history on previous loans with us
+    banned: [credit bureau, other lenders, credit history length]
+    escalate: false
+    sensitive: false
+
+  avg_cc_utilization:
+    code: CS26
+    source: history
+    reason: High balances relative to credit limits on credit cards with us
+    banned: [credit bureau, other lenders]
+    escalate: false
+    sensitive: false
+
+  max_cc_utilization:
+    code: CS27
+    source: history
+    reason: A credit card with us was used at or near its credit limit
+    banned: [credit bureau, other lenders]
+    escalate: false
+    sensitive: false
+
+  avg_days_past_due_cc:
+    code: CS28
+    source: history
+    reason: Delinquent payments on credit cards with us
+    banned: [credit bureau, other lenders]
+    escalate: false
+    sensitive: false
+
+  num_credit_cards:
+    code: CS29
+    source: history
+    reason: Number of credit card accounts with us
+    banned: [credit bureau, other lenders]
+    escalate: false
+    sensitive: false
+
+  pos_late_payments:
+    code: CS30
+    source: history
+    reason: Number of late payments on previous point-of-sale or cash loans with us
+    banned: [credit bureau, other lenders]
+    escalate: false
+    sensitive: false
+
+  avg_pos_days_past_due:
+    code: CS31
+    source: history
+    reason: Delinquent payments on previous point-of-sale or cash loans with us
+    banned: [credit bureau, other lenders]
+    escalate: false
+    sensitive: false
+
+  exposure_at_risk:
+    code: CS32
+    source: application
+    reason: Total amount of credit requested is high given the number of active accounts with other lenders
+    banned: [with us]
+    escalate: false
+    sensitive: false
+
+  late_payment_rate:
+    code: CS33
+    source: history
+    reason: History of late payments on previous loans with us
+    banned: [credit bureau, other lenders, bankruptcy]
+    escalate: false
+    sensitive: false
+
+  high_util_x_high_leverage:
+    code: CS34
+    source: history
+    reason: High credit card utilization combined with credit requested that is high relative to income
+    banned: [credit bureau, other lenders]
+    escalate: false
+    sensitive: false
