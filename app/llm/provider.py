@@ -50,6 +50,8 @@ class RunUsage:
 class LLMProvider(Protocol):
     model: str
 
+    def configure(self, model_config: dict[str, Any]) -> None: ...
+
     async def chat(
         self, messages: list[dict], *, tools: list[dict] | None = None, json_output: bool = False
     ) -> LLMResponse: ...

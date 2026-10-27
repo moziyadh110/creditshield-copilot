@@ -49,10 +49,21 @@ TOOL_SCHEMAS = [
 ]
 
 
+class ToolFailure(Exception):
+    """An infrastructure failure (database, LLM provider, CreditShield API). The run escalates
+    to human review instead of crashing or carrying on without the tool's answer."""
+
+
 class Toolbox:
-    def __init__(self, catalog: ReasonCatalog, search: Callable[[str], list[Chunk]]):
+    def __init__(
+        self,
+        catalog: ReasonCatalog,
+        search: Callable[[str], list[Chunk]],
+        search_timeout_s: float = 10.0,
+    ):
         self.catalog = catalog
         self.search = search
+        self.search_timeout_s = search_timeout_s
         self.retrieved_ids: list[str] = []
 
     def get_reason_codes(self, features: list[str]) -> dict[str, Any]:
@@ -71,7 +82,16 @@ class Toolbox:
             name="retrieval.search_regulation", span_type=SpanType.RETRIEVER
         ) as span:
             span.set_inputs({"query": query})
-            chunks = await asyncio.to_thread(self.search, query)
+            try:
+                chunks = await asyncio.wait_for(
+                    asyncio.to_thread(self.search, query), timeout=self.search_timeout_s
+                )
+            except TimeoutError as e:
+                raise ToolFailure(
+                    f"regulation search timed out after {self.search_timeout_s:g}s"
+                ) from e
+            except Exception as e:  # database down, bad connection, etc.
+                raise ToolFailure(f"regulation search failed: {type(e).__name__}: {e}") from e
             span.set_outputs([{"section": c.section_id, "source": c.source_url} for c in chunks])
         self.retrieved_ids += [
             c.section_id for c in chunks if c.section_id not in self.retrieved_ids
@@ -79,7 +99,8 @@ class Toolbox:
         return [{"section": c.section_id, "text": c.text} for c in chunks]
 
     async def call(self, name: str, arguments: str) -> str:
-        """Run one tool call; errors go back to the model as data instead of crashing the run."""
+        """Run one tool call. Bad arguments go back to the model as data; a ToolFailure
+        propagates so the run escalates."""
         with mlflow.start_span(name=f"tool.{name}", span_type=SpanType.TOOL) as span:
             span.set_inputs({"arguments": arguments})
             try:
