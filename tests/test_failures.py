@@ -135,3 +135,25 @@ def test_creditshield_approval_is_not_a_denial():
     body = {"decision": "APPROVE", "adverse_action_reasons": []}
     with pytest.raises(NotADenial):
         asyncio.run(client_with(lambda req: httpx.Response(200, json=body)).predict(5, "x", {}))
+
+
+@pytest.mark.parametrize(
+    "change, error",
+    [
+        ({"reasons": []}, "reasons"),
+        ({"product": None}, "product"),
+        (
+            {"reasons": [{"rank": 1, "feature": "late_payment_rate", "impact_score": None}]},
+            "impact",
+        ),
+        ({"reasons": [{"rank": 1, "feature": None, "impact_score": 0.3}]}, "feature"),
+    ],
+)
+def test_malformed_case_data_escalates_without_llm_call(change, error):
+    from app.services.notices import run_notice
+
+    provider = RaisingProvider()  # any LLM call would raise, and show up as a provider error
+    r = asyncio.run(run_notice({**CASE.model_dump(), **change}, provider=provider))
+    assert r.outcome == "escalated" and r.notice is None
+    assert r.escalation_reason.startswith("invalid case data") and error in r.escalation_reason
+    assert r.usage.calls == 0
