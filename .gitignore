@@ -24,3 +24,6 @@ Thumbs.db
 
 # MLflow server artifacts (tracking metadata lives in Postgres)
 mlartifacts/
+
+# Local Claude Code session notes
+CLAUDE.md
