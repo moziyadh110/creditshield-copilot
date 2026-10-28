@@ -1,7 +1,7 @@
 """Calibrate the clarity judge against hand scores.
 
   uv run python -m evals.calibration sheet RESULTS.cases.jsonl   write evals/calibration/sheet.csv
-  (the user fills in your_score, 1-5, using the rubric in evals/judge.py)
+  (the user replaces each ? in your_score with 1-5, using the rubric in evals/judge.py)
   uv run python -m evals.calibration compare                     write evals/calibration/report.md
 
 The sheet is blind: it holds the paragraphs only, never the judge's scores. Ten sent
@@ -20,6 +20,7 @@ DIR = Path(__file__).parent / "calibration"
 SHEET = DIR / "sheet.csv"
 REPORT = DIR / "report.md"
 N = 10
+PLACEHOLDER = "?"
 
 
 def pick(records: list[dict], n: int = N) -> list[dict]:
@@ -41,12 +42,15 @@ def write_sheet(results: Path) -> None:
     DIR.mkdir(exist_ok=True)
     with SHEET.open("w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
-        w.writerow(["case_id", "source", "paragraph", "your_score", "your_note"])
+        # Score first and a ? placeholder, so filling it in never touches the quoted paragraph.
+        w.writerow(["case_id", "your_score", "your_note", "source", "paragraph"])
         for r in pick(records):
-            w.writerow([r["case_id"], results.name, r["output"]["draft"]["paragraph"], "", ""])
+            w.writerow(
+                [r["case_id"], PLACEHOLDER, "", results.name, r["output"]["draft"]["paragraph"]]
+            )
     (DIR / "rubric.md").write_text("# Clarity rubric (same text the judge gets)\n\n```\n"
                                    + RUBRIC + "\n```\n", encoding="utf-8")  # fmt: skip
-    print(f"wrote {SHEET}: fill in your_score (1-5) for each row, then run compare")
+    print(f"wrote {SHEET}: replace each ? in your_score with 1-5, then run compare")
 
 
 def agreement(pairs: list[tuple[int, int]]) -> dict[str, float]:
@@ -63,7 +67,7 @@ def agreement(pairs: list[tuple[int, int]]) -> dict[str, float]:
 
 def compare() -> None:
     rows = list(csv.DictReader(SHEET.open(encoding="utf-8")))
-    missing = [r["case_id"] for r in rows if not r["your_score"].strip()]
+    missing = [r["case_id"] for r in rows if r["your_score"].strip() in ("", PLACEHOLDER)]
     if missing:
         raise SystemExit(f"no hand score yet for {', '.join(missing)}")
     judged = {}
