@@ -48,6 +48,8 @@ class Settings(BaseSettings):
     mlflow_experiment: str = "creditshield-copilot"
     # Eval runs and their traces live apart, so monitoring never counts eval traffic.
     mlflow_eval_experiment: str = "creditshield-copilot-eval"
+    # One run per day from `make monitor`: the daily metrics and any alerts.
+    mlflow_monitor_experiment: str = "creditshield-copilot-monitoring"
     prompt_name: str = "notice-reasons"
     prompt_alias: str = "production"  # "candidate" during eval
 
@@ -56,6 +58,9 @@ class Settings(BaseSettings):
 
     # X-API-Key for the HTTP API. Unset = every protected route answers 503 (fail closed).
     api_key: SecretStr | None = None
+
+    # Optional: alerts from `make monitor` are also POSTed here as JSON (e.g. a Slack webhook).
+    alert_webhook_url: SecretStr | None = None
 
 
 @lru_cache
