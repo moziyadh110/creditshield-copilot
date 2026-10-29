@@ -1,10 +1,11 @@
 # Each target is a thin wrapper: on Windows without make, run the uv command directly.
-.PHONY: db up down mlflow migrate prompts fetch-regb ingest draft api replay monitor eval eval-recorded eval-cases check promote rollback test lint
+.PHONY: db up down mlflow migrate prompts fetch-regb ingest draft api review replay monitor eval eval-recorded eval-cases check promote rollback test lint
 
 db:
 	docker compose up -d --wait db
 
-# The whole stack in Docker: db, MLflow (5001), setup, the API (8001). Stop `make mlflow` first.
+# The whole stack in Docker: db, MLflow (5001), setup, the API (8001) and the review page
+# (8502). Stop `make mlflow` first.
 up:
 	docker compose up -d --wait --build
 
@@ -34,6 +35,10 @@ draft:
 # The HTTP API on http://localhost:8001 (docs at /docs); needs API_KEY in .env.
 api:
 	uv run uvicorn app.api.main:app --host 127.0.0.1 --port 8001
+
+# The review page and monitoring tab on http://localhost:8502; calls the API with API_KEY.
+review:
+	uv run streamlit run app/review/page.py --server.port 8502 --server.address 127.0.0.1 \n		--browser.gatherUsageStats false
 
 # A day of demo traffic: every case in denials.parquet through the running API.
 replay:

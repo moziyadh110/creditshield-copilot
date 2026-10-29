@@ -33,6 +33,7 @@ from datetime import UTC, date, datetime, time
 import httpx
 import mlflow
 import numpy as np
+import pandas as pd
 
 from app.config import get_settings
 from app.logs import setup_logging
@@ -149,22 +150,36 @@ def daily_metrics(rows: list[dict], ref_shares: dict[str, float]) -> dict[str, f
     return metrics
 
 
+def history() -> pd.DataFrame:
+    """One row per monitored day (the latest run wins), indexed by ISO day, oldest first:
+    the daily metrics, escalation_baseline, and an `alerts` column joining that day's alert
+    messages. Empty if `make monitor` has never run."""
+    exp = mlflow.get_experiment_by_name(get_settings().mlflow_monitor_experiment)
+    if exp is None:
+        return pd.DataFrame()
+    runs = mlflow.search_runs(
+        experiment_ids=[exp.experiment_id],
+        filter_string="attributes.status = 'FINISHED'",
+        order_by=["attributes.start_time ASC"],
+    )
+    if runs.empty or "tags.day" not in runs:
+        return pd.DataFrame()
+    runs = runs.dropna(subset=["tags.day"]).drop_duplicates("tags.day", keep="last")
+    alert_cols = [c for c in runs if c.startswith("tags.alert.")]
+    out = runs[[c for c in runs if c.startswith("metrics.")]]
+    out.columns = [c.removeprefix("metrics.") for c in out.columns]
+    out = out.assign(
+        alerts=runs[alert_cols].apply(lambda r: "; ".join(r.dropna()), axis=1) if alert_cols else ""
+    )
+    return out.set_index(runs["tags.day"].rename("day")).sort_index()
+
+
 def escalation_baseline(day: date, by_design: float) -> tuple[float, str]:
     """Median escalation rate of the last 7 monitored days before `day`; until 7 exist, the
     rate denials.parquet escalates by design."""
-    exp = mlflow.get_experiment_by_name(get_settings().mlflow_monitor_experiment)
-    rates: dict[str, float] = {}
-    if exp is not None:
-        runs = mlflow.search_runs(
-            experiment_ids=[exp.experiment_id],
-            filter_string="attributes.status = 'FINISHED'",
-            order_by=["attributes.start_time ASC"],
-        )
-        for _, run in runs.iterrows():  # the latest run per day wins
-            d, rate = run.get("tags.day"), run.get("metrics.escalation_rate")
-            if d and d < day.isoformat() and rate == rate and rate is not None:
-                rates[d] = float(rate)
-    recent = [rates[d] for d in sorted(rates)[-BASELINE_DAYS:]]
+    runs = history()
+    rates = runs["escalation_rate"].dropna() if "escalation_rate" in runs else []
+    recent = [float(r) for d, r in rates.items() if d < day.isoformat()][-BASELINE_DAYS:]
     if len(recent) < BASELINE_DAYS:
         return by_design, f"denials.parquet by design ({len(recent)} of 7 days monitored)"
     return statistics.median(recent), "median of the last 7 days"

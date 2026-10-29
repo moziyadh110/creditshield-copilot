@@ -58,6 +58,8 @@ class Settings(BaseSettings):
 
     # X-API-Key for the HTTP API. Unset = every protected route answers 503 (fail closed).
     api_key: SecretStr | None = None
+    # Where the review page finds the API (it sends api_key with every call).
+    copilot_api_url: str = "http://localhost:8001"
 
     # Optional: alerts from `make monitor` are also POSTed here as JSON (e.g. a Slack webhook).
     alert_webhook_url: SecretStr | None = None

@@ -1,7 +1,8 @@
 # Host ports avoid CreditShield's (Postgres 5432, Redis 6379, API 8000).
 #
 #   docker compose up -d db              the database only (local development)
-#   docker compose up -d --wait          db, MLflow, one-off setup, the Copilot API
+#   docker compose up -d --wait          db, MLflow, one-off setup, the Copilot API (8001)
+#                                        and the review page (8502)
 #   docker compose --profile live up -d  also CreditShield's API + Redis (CASE_SOURCE=api)
 #
 # The API reads DEEPSEEK_API_KEY and API_KEY from .env. Without an LLM key it still starts,
@@ -75,6 +76,20 @@ services:
       interval: 5s
       timeout: 5s
       retries: 30
+
+  # The review page and monitoring tab, calling the API with the same API_KEY.
+  review:
+    <<: *app
+    command: ["streamlit", "run", "app/review/page.py", "--server.port", "8502",
+              "--server.address", "0.0.0.0", "--server.headless", "true",
+              "--browser.gatherUsageStats", "false"]
+    ports: ["8502:8502"]
+    environment:  # a merge key replaces this whole block, so it repeats x-app's
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-copilot}:${POSTGRES_PASSWORD:-copilot}@db:5432/${POSTGRES_DB:-copilot}
+      MLFLOW_TRACKING_URI: http://mlflow:5001
+      COPILOT_API_URL: http://api:8001
+    depends_on:
+      api: {condition: service_healthy}
 
   # Live mode only (CASE_SOURCE=api): CreditShield's API, pinned by digest to release v1.1.0.
   # Reachable from the Copilot as http://creditshield:8000; not published on the host.
