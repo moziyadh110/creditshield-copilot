@@ -54,6 +54,9 @@ class Settings(BaseSettings):
     # None means no cap; cost is still logged on every run.
     daily_budget_usd: float | None = None
 
+    # X-API-Key for the HTTP API. Unset = every protected route answers 503 (fail closed).
+    api_key: SecretStr | None = None
+
 
 @lru_cache
 def get_settings() -> Settings:

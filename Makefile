@@ -1,5 +1,5 @@
 # Each target is a thin wrapper: on Windows without make, run the uv command directly.
-.PHONY: db mlflow migrate prompts fetch-regb ingest draft eval eval-cases check promote rollback test lint
+.PHONY: db mlflow migrate prompts fetch-regb ingest draft api eval eval-cases check promote rollback test lint
 
 db:
 	docker compose up -d --wait db
@@ -23,6 +23,10 @@ ingest:
 
 draft:
 	uv run copilot draft --applicant $(APPLICANT)
+
+# The HTTP API on http://localhost:8001 (docs at /docs); needs API_KEY in .env.
+api:
+	uv run uvicorn app.api.main:app --host 127.0.0.1 --port 8001
 
 # PROMPT is a version number or alias; MODE is e2e, generation or both.
 PROMPT ?= candidate
