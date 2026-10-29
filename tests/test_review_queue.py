@@ -107,3 +107,18 @@ def _settings_with_timeout(seconds):
 
     settings = get_settings().model_copy(update={"llm_timeout_s": seconds})
     return lambda: settings
+
+
+def test_no_llm_key_sends_denials_to_review(sessions):
+    from app.config import get_settings
+    from app.llm.provider import UnconfiguredProvider, get_provider_or_unconfigured
+
+    provider = get_provider_or_unconfigured(
+        get_settings().model_copy(update={"deepseek_api_key": None})
+    )
+    assert isinstance(provider, UnconfiguredProvider)
+    r = asyncio.run(
+        draft_notice(APPLICANT, case=CASE, provider=provider, search=lambda q: [Chunk()])
+    )
+    assert r.outcome == "escalated" and r.notice is None
+    assert "No API key set" in queued(sessions, r.review_id).reason

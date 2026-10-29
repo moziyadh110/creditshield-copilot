@@ -55,7 +55,7 @@ async def judge_clarity(
         )
     finally:
         if own:  # close inside this event loop, or httpx complains once the loop is gone
-            await provider.client.close()
+            await provider.aclose()
     try:
         score, rationale = _parse(resp.message.get("content") or "")
     except (ValueError, KeyError, TypeError) as e:

@@ -56,6 +56,8 @@ class LLMProvider(Protocol):
         self, messages: list[dict], *, tools: list[dict] | None = None, json_output: bool = False
     ) -> LLMResponse: ...
 
+    async def aclose(self) -> None: ...
+
 
 class OpenAICompatibleProvider:
     def __init__(self, settings: Settings, client: AsyncOpenAI | None = None):
@@ -127,6 +129,34 @@ class OpenAICompatibleProvider:
             message=message, usage=usage, cost_usd=cost, model=resp.model or self.model
         )
 
+    async def aclose(self) -> None:
+        """Close the HTTP client inside the event loop that used it."""
+        await self.client.close()
+
+
+class UnconfiguredProvider:
+    """Stands in for the API when no LLM key is set: every call fails, so every denial goes to
+    human review (fail closed) instead of the service refusing to start."""
+
+    def __init__(self, settings: Settings, reason: str):
+        self.model, self.reason = settings.llm_model, reason
+
+    def configure(self, model_config: dict[str, Any]) -> None:
+        self.model = model_config.get("model", self.model)
+
+    async def chat(self, messages, *, tools=None, json_output=False) -> LLMResponse:
+        raise RuntimeError(self.reason)
+
+    async def aclose(self) -> None:
+        pass
+
 
 def get_provider(settings: Settings | None = None) -> OpenAICompatibleProvider:
     return OpenAICompatibleProvider(settings or get_settings())
+
+
+def get_provider_or_unconfigured(settings: Settings | None = None) -> LLMProvider:
+    try:
+        return get_provider(settings)
+    except RuntimeError as e:
+        return UnconfiguredProvider(settings or get_settings(), str(e))

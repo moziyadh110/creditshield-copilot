@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 from app.api.routes import router
 from app.config import get_settings
 from app.db.session import make_async_engine, make_async_sessionmaker
-from app.llm.provider import LLMProvider, get_provider
+from app.llm.provider import LLMProvider, UnconfiguredProvider, get_provider_or_unconfigured
 from app.llmops.tracing import setup_tracing
 from app.logs import request_id, setup_logging
 from app.repositories.cases import load_denials
@@ -51,8 +51,13 @@ def create_app(
         if get_settings().case_source == "file":
             await asyncio.to_thread(load_denials)
         engine = make_async_engine()
+        llm = provider or get_provider_or_unconfigured()
+        if isinstance(llm, UnconfiguredProvider):
+            log.warning(
+                "no LLM provider: every denial goes to human review", extra={"why": llm.reason}
+            )
         app.state.deps = Deps(
-            provider=provider or get_provider(),
+            provider=llm,
             search=search or pgvector_search,
             sessions=make_async_sessionmaker(engine),
             engine=engine,
@@ -62,7 +67,7 @@ def create_app(
             yield
         finally:
             if provider is None:
-                await app.state.deps.provider.client.close()
+                await app.state.deps.provider.aclose()
             await engine.dispose()
             log.info("shutdown")
 
