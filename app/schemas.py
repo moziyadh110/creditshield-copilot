@@ -77,7 +77,7 @@ class CheckResult(BaseModel):
     name: str
     passed: bool
     detail: str = ""
-    # What a failure does (docs/plan.md guardrails table): one revision, or straight to review.
+    # What a failure does (docs/design.md, Guardrails): one revision, or straight to review.
     on_fail: Literal["revise", "escalate"] = "revise"
 
 

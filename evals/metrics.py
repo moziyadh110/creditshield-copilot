@@ -4,7 +4,7 @@ A record is what the runner keeps per case: the case row from cases.jsonl plus t
 output (outcome, final draft, cost, latency). Pure functions, so the MLflow scorers, the
 metrics JSON and the tests all compute the same numbers.
 
-Definitions (docs/plan.md, Evaluation plan):
+Definitions (docs/design.md, Evaluation):
 - faithfulness: over every case that should get a draft (all but must_escalate), the final
   draft's reason features equal the case's, in rank order. No draft counts as a miss.
 - invented_reasons: reason features in a final draft that the case does not have.

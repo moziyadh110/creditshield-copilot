@@ -1,4 +1,4 @@
-"""Eval metrics on hand-made records: each target counts what docs/plan.md says it counts."""
+"""Eval metrics on hand-made records: each target counts what docs/design.md says it counts."""
 
 from evals.metrics import aggregate
 

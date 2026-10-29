@@ -1,5 +1,5 @@
 # Eval targets, committed before the first eval run and never moved afterwards.
-# Source: docs/plan.md, Evaluation plan and LLMOps (release gate) sections.
+# Described in docs/design.md, Evaluation and LLMOps (gate) sections.
 #
 # Gate rule (make promote and CI --check read this same file through the same code):
 #   kind: count  -> must hold on EVERY one of the repeated runs
