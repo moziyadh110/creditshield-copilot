@@ -29,7 +29,7 @@ features:
     code: CS01
     source: application
     reason: Length of employment
-    banned: [age, young, old, retire, too new, job-hopping]
+    banned: [age, young, old, retire, too new, job-hopping, short, long, brief]
     escalate: false
     sensitive: true
 

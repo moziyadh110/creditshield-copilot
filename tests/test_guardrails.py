@@ -83,6 +83,14 @@ def test_banned_wording_fails_when_bureau_reason_says_with_us():
     assert not result.passed and "bureau_debt_ratio: 'with us'" in result.detail
 
 
+@pytest.mark.parametrize("text", ["Your length of employment is short.", "You have a long job."])
+def test_banned_wording_fails_when_employment_gets_a_direction(text):
+    # years_employed is missing for retired and unemployed applicants, so "short" can be false.
+    draft = make_draft(features=["years_employed"], texts=[text])
+    result = check_banned_wording(draft, get_reason_catalog())
+    assert not result.passed and result.detail.startswith("years_employed:")
+
+
 # --- protected attributes -----------------------------------------------------------------
 
 
