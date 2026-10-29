@@ -5,6 +5,7 @@ approval showing its failed checks, and the monitoring tab with and without data
 from pathlib import Path
 from unittest.mock import patch
 
+import mlflow
 import pandas as pd
 import pytest
 from streamlit.testing.v1 import AppTest
@@ -74,12 +75,15 @@ HISTORY = pd.DataFrame(
 def page():
     def run(history=HISTORY):
         FakeAPI.posts = []
+        store = mlflow.get_tracking_uri()
         with (
             patch("httpx.Client", FakeAPI),
             patch("app.llmops.monitor.history", lambda: history),
         ):
             at = AppTest.from_file(PAGE, default_timeout=60).run()
         assert not at.exception, [e.value for e in at.exception]
+        # The page runs in this process: it must not repoint later tests at a real server.
+        assert mlflow.get_tracking_uri() == store
         return at
 
     return run

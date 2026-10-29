@@ -125,7 +125,8 @@ def queue_tab() -> None:
 
 
 def monitoring_tab() -> None:
-    mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
+    if not mlflow.is_tracking_uri_set():  # tests point MLflow at a temporary store first
+        mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
     try:
         h = history()
     except Exception as e:  # noqa: BLE001  MLflow down must not break the review tab
