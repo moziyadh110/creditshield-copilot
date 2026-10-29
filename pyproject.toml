@@ -5,7 +5,9 @@ description = "Plain-language adverse action notices for CreditShield denials, w
 requires-python = ">=3.13,<3.14"
 dependencies = [
     "alembic>=1.20.1",
+    "asyncpg>=0.31",
     "en-core-web-sm",
+    "fastapi>=0.162",
     "httpx>=0.28.1",
     "langchain>=1.4.7",
     "langgraph>=1.2.18",
@@ -21,8 +23,9 @@ dependencies = [
     "pydantic-settings>=2.16.1",
     "pyyaml>=6.0.3",
     "sentence-transformers>=6.2.0",
-    "sqlalchemy>=2.1.6",
+    "sqlalchemy[asyncio]>=2.1.6",
     "textstat>=0.7.13",
+    "uvicorn>=0.54",
 ]
 
 [project.scripts]
