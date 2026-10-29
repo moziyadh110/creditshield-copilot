@@ -1,4 +1,23 @@
 # Host ports avoid CreditShield's (Postgres 5432, Redis 6379, API 8000).
+#
+#   docker compose up -d db              the database only (local development)
+#   docker compose up -d --wait          db, MLflow, one-off setup, the Copilot API
+#   docker compose --profile live up -d  also CreditShield's API + Redis (CASE_SOURCE=api)
+#
+# The API reads DEEPSEEK_API_KEY and API_KEY from .env. Without an LLM key it still starts,
+# and every denial goes to human review.
+
+x-app: &app
+  build: .
+  image: creditshield-copilot:local
+  env_file:
+    - path: .env
+      required: false
+  environment:
+    DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-copilot}:${POSTGRES_PASSWORD:-copilot}@db:5432/${POSTGRES_DB:-copilot}
+    MLFLOW_TRACKING_URI: http://mlflow:5001
+    CREDITSHIELD_API_URL: http://creditshield:8000
+
 services:
   db:
     image: pgvector/pgvector:pg17
@@ -15,6 +34,61 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  # The same tracking store `make mlflow` uses: the mlflow database, artifacts in ./mlartifacts.
+  # Stop a host `make mlflow` first; both want port 5001.
+  mlflow:
+    <<: *app
+    command: >
+      mlflow server
+      --backend-store-uri postgresql+psycopg2://${POSTGRES_USER:-copilot}:${POSTGRES_PASSWORD:-copilot}@db:5432/mlflow
+      --artifacts-destination /mlartifacts
+      --host 0.0.0.0 --port 5001
+      --allowed-hosts mlflow,mlflow:5001,localhost,localhost:5001,127.0.0.1,127.0.0.1:5001
+    ports: ["5001:5001"]
+    volumes:
+      - ./mlartifacts:/mlartifacts
+    depends_on:
+      db: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:5001/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  # One-off: migrations, prompt registration and the Reg B index. All idempotent; no paid calls.
+  setup:
+    <<: *app
+    command: sh -c "alembic upgrade head && python -m app.llmops.prompts && python -m app.retrieval.ingest"
+    depends_on:
+      db: {condition: service_healthy}
+      mlflow: {condition: service_healthy}
+    restart: "no"
+
+  api:
+    <<: *app
+    ports: ["8001:8001"]
+    depends_on:
+      setup: {condition: service_completed_successfully}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8001/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  # Live mode only (CASE_SOURCE=api): CreditShield's API, pinned by digest to release v1.1.0.
+  # Reachable from the Copilot as http://creditshield:8000; not published on the host.
+  creditshield:
+    image: ghcr.io/moziyadh110/fair-lend-ml:v1.1.0@sha256:5463dcc4ff8d03175feb03d7ef87348e57ad39455981ee48d97bc68b7295880c
+    profiles: [live]
+    environment:
+      API_KEY: ${CREDITSHIELD_API_KEY:-}
+      REDIS_HOST: redis
+    depends_on: [redis]
+
+  redis:
+    image: redis:7-alpine
+    profiles: [live]
 
 volumes:
   pgdata:

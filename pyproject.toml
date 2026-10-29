@@ -25,6 +25,7 @@ dependencies = [
     "sentence-transformers>=6.2.0",
     "sqlalchemy[asyncio]>=2.1.6",
     "textstat>=0.7.13",
+    "torch>=2.14",
     "uvicorn>=0.54",
 ]
 
@@ -56,6 +57,14 @@ addopts = "-q"
 
 [tool.uv.sources]
 en-core-web-sm = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" }
+# CPU-only PyTorch on Linux (the Docker image and CI): the default Linux wheels pull in
+# several GB of CUDA libraries the embedding model never uses. Windows wheels are CPU-only.
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [dependency-groups]
 dev = [
