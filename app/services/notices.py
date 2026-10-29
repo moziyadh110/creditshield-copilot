@@ -4,6 +4,7 @@ serves the response cache, enforces the daily budget, and writes the run log, th
 queue and the spend counter."""
 
 import asyncio
+import json
 import logging
 import time
 from collections.abc import Callable
@@ -70,6 +71,24 @@ def pgvector_search(query: str) -> list[Chunk]:
         return search_regulation(s, query, k=3)
 
 
+def _monitor_tags(
+    decision: str,
+    features: list[str],
+    checks: list[CheckResult],
+    escalation_reason: str | None,
+    usage: RunUsage,
+) -> dict[str, str]:
+    """Per-trace facts the daily monitoring job reads (app/llmops/monitor.py)."""
+    return {
+        "decision": decision,
+        "reason_features": ",".join(features),
+        "checks": json.dumps({c.name: c.passed for c in checks}),
+        "llm_calls": str(usage.calls),
+        "cost_usd": f"{usage.cost_usd:.8f}",
+        "provider_error": str("LLM provider" in (escalation_reason or "")).lower(),
+    }
+
+
 def _escalated(
     applicant_id: int, decision: str, reason: str, model: str, started: float, trace_id: str
 ) -> NoticeResult:
@@ -121,9 +140,11 @@ async def run_notice(
             )
             root.set_inputs({"case": raw})
             root.set_outputs({"outcome": "escalated", "notice": None})
+            monitor = _monitor_tags(str(raw.get("decision")), [], [], reason, usage)
             mlflow.update_current_trace(
-                tags={**tags, "case_id": str(raw.get("applicant_id")), "outcome": "escalated"}
-            )
+                tags={**tags, **monitor, "case_id": str(raw.get("applicant_id")),
+                      "outcome": "escalated"}
+            )  # fmt: skip
             return _escalated(
                 int(raw.get("applicant_id") or 0),
                 str(raw.get("decision") or "UNKNOWN"),
@@ -147,9 +168,17 @@ async def run_notice(
             {"case": case, "agent_input": agent_input}
         )
         root.set_outputs({"outcome": state["outcome"], "notice": state.get("notice")})
+        monitor = _monitor_tags(
+            case.decision,
+            [r.feature for r in case.reasons],
+            state.get("checks", []),
+            state.get("escalation_reason"),
+            usage,
+        )
         mlflow.update_current_trace(
             tags={
                 **tags,
+                **monitor,
                 "case_id": str(case.applicant_id),
                 "prompt_version": str(prompt.version),
                 "model": provider.model,
@@ -190,7 +219,9 @@ async def _from_cache(
 ) -> NoticeResult | None:
     """Re-render the cached paragraph with today's date and run today's checks on it (no LLM
     call), in a trace tagged cache_hit. None if any check fails: a notice drafted before a
-    guardrail changed must pass the current checks too, or it is drafted again."""
+    guardrail changed must pass the current checks too, or it is drafted again. A rejected
+    entry keeps its trace, tagged cache_rejected (monitoring counts only traces with an
+    outcome)."""
     started = time.perf_counter()
     draft = NoticeDraft.model_validate(hit.draft)
     notice = render_notice(
@@ -199,16 +230,25 @@ async def _from_cache(
         notice_date=agent_input.notice_date,
         reasons_paragraph=draft.paragraph,
     )
-    checks = await asyncio.to_thread(run_checks, case, draft, notice, agent_input.applicant_note)
-    if not all(c.passed for c in checks):
-        log.info("cache entry fails current checks", extra={"cached_run_id": hit.id})
-        return None
+    # The checks run inside the trace: outside it, each check span became its own trace.
     with mlflow.start_span(name="draft_notice", span_type=SpanType.AGENT) as root:
         root.set_inputs(agent_input.model_dump(mode="json"))
+        checks = await asyncio.to_thread(
+            run_checks, case, draft, notice, agent_input.applicant_note
+        )
+        if not all(c.passed for c in checks):
+            log.info("cache entry fails current checks", extra={"cached_run_id": hit.id})
+            root.set_outputs({"cache_rejected": True, "cached_run_id": hit.id})
+            mlflow.update_current_trace(
+                tags={**tags, "case_id": str(case.applicant_id), "cache_rejected": "true"}
+            )
+            return None
         root.set_outputs({"outcome": hit.outcome, "notice": notice, "cached_run_id": hit.id})
+        features = [r.feature for r in case.reasons]
         mlflow.update_current_trace(
             tags={
                 **tags,
+                **_monitor_tags(case.decision, features, checks, None, RunUsage()),
                 "case_id": str(case.applicant_id),
                 "prompt_version": str(hit.prompt_version),
                 "model": hit.model,
@@ -241,8 +281,10 @@ def _over_budget(spent: float, budget: float, model: str, case: DenialCase, tags
     reason = f"daily LLM budget reached (${spent:.4f} of ${budget:.2f}): no LLM call"
     with mlflow.start_span(name="draft_notice", span_type=SpanType.AGENT) as root:
         root.set_outputs({"outcome": "escalated", "notice": None})
+        features = [r.feature for r in case.reasons]
         mlflow.update_current_trace(
-            tags={**tags, "case_id": str(case.applicant_id), "outcome": "escalated",
+            tags={**tags, **_monitor_tags(case.decision, features, [], reason, RunUsage()),
+                  "case_id": str(case.applicant_id), "outcome": "escalated",
                   "budget_blocked": "true"}
         )  # fmt: skip
     return _escalated(case.applicant_id, case.decision, reason, model, started, root.trace_id)

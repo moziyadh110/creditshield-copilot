@@ -9,6 +9,7 @@ synthetic applicant IDs, and the scripted LLM costs $0, so the real spend counte
 import json
 from datetime import date
 
+import mlflow
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
@@ -147,6 +148,13 @@ def test_notice_then_cache_hit(api):
     assert cached["cache_hit"] is True and provider.calls == calls  # no LLM call
     assert cached["notice"] == body["notice"] and cached["trace_id"] != body["trace_id"]
     assert cached["prompt_version"] == body["prompt_version"]
+    # Today's checks run inside the cache hit's trace (they used to leak out as 7 orphan
+    # traces), and the trace carries what `make monitor` reads.
+    mlflow.flush_trace_async_logging()
+    trace = mlflow.get_trace(cached["trace_id"])
+    assert {"draft_notice", "check.faithfulness"} <= {s.name for s in trace.data.spans}
+    tags = trace.info.tags
+    assert tags["decision"] == "DENY" and tags["llm_calls"] == "0" and tags["cache_hit"] == "true"
 
 
 def test_request_id_is_echoed_or_created(api):
