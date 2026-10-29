@@ -1,7 +1,8 @@
 """Register prompt source files in the MLflow prompt registry:  uv run python -m app.llmops.prompts
 
-Each app/agent/prompts/<name>/v<n>.yaml becomes a registry version only if its template or
-model config differs from the latest registered version, so re-running is a no-op. The first
+Each app/agent/prompts/<name>/v<n>.yaml becomes a registry version only if no registered
+version has the same template and model config, so re-running is a no-op and v<n>.yaml stays
+registry version n. The first
 version registered gets @production when no @production alias exists yet; a newer version gets
 @candidate, and only the release gate (app/llmops/gate.py) can make it @production.
 """
@@ -23,12 +24,11 @@ def _source_files(name: str) -> list[Path]:
     return sorted((PROMPTS_DIR / name).glob("v*.yaml"), key=lambda p: int(p.stem[1:]))
 
 
-def _latest(name: str):
+def _versions(name: str) -> list:
     try:
-        versions = list(MlflowClient().search_prompt_versions(name))
+        return list(MlflowClient().search_prompt_versions(name))
     except MlflowException:
-        return None
-    return max(versions, key=lambda v: int(v.version), default=None)
+        return []
 
 
 def _model_config(version) -> dict:
@@ -40,11 +40,9 @@ def register(name: str) -> list[int]:
     registered = []
     for path in _source_files(name):
         src = yaml.safe_load(path.read_text(encoding="utf-8"))
-        latest = _latest(name)
-        if (
-            latest is not None
-            and latest.template == src["template"]
-            and _model_config(latest) == src["model_config"]
+        if any(
+            v.template == src["template"] and _model_config(v) == src["model_config"]
+            for v in _versions(name)
         ):
             continue
         v = mlflow.genai.register_prompt(
