@@ -1,4 +1,4 @@
-"""Run the 50-case eval:  uv run python -m evals.runner --prompt candidate
+"""Run the 50-case eval:  uv run python -m evals.runner --prompt candidate [--llm recorded]
 
 Each mode is one MLflow run in the eval experiment: every case is drafted into a trace
 linked to the prompt version it loaded, then mlflow.genai.evaluate scores those traces with
@@ -12,12 +12,20 @@ Modes:
               scored without retrieval noise
 
 The pipeline's guardrails stay on in both modes: the eval measures what would be sent.
+
+LLM calls (--llm):
+  live      real API calls (default). A full-set live run also records every LLM call to
+            evals/recorded/v<version>/<model>/<mode>-<stamp>.jsonl (see evals/recording.py)
+  recorded  no API calls: replays the latest `repeated_runs` recordings for the version, one
+            eval run each, into the separate "-recorded" experiment and
+            evals/results/recorded/. Fails with "re-record needed" if none match. CI uses this
 """
 
 import argparse
 import asyncio
 import json
 import os
+import sys
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -27,14 +35,14 @@ from mlflow.entities import Feedback
 from mlflow.genai.scorers import scorer
 
 from app.config import DATA_DIR, get_settings
-from app.llm.provider import get_provider
-from app.llmops.gate import load_targets, passes, resolve_version
+from app.llmops.gate import eval_experiment, load_targets, passes, resolve_version
 from app.llmops.tracing import setup_tracing
 from app.retrieval.chunking import chunk_regb
 from app.services.notices import run_notice
 from evals import metrics as m
 from evals.cases import load_cases
 from evals.judge import JUDGE_MODEL_CONFIG, judge_clarity
+from evals.recording import Live, Replay, recording_dir, recordings
 
 RESULTS_DIR = Path(__file__).parent / "results"
 NOTICE_DATE = date(2026, 10, 28)  # fixed, so the LLM input (and CI recordings) never drift
@@ -70,7 +78,7 @@ def _error_output(e: Exception) -> dict:
             "completion_tokens": 0, "cost_usd": 0.0, "latency_ms": 0, "model": ""}  # fmt: skip
 
 
-def make_scorers(records: dict[str, dict], judge: bool):
+def make_scorers(records: dict[str, dict], judge: bool, llm: Live | Replay):
     """Scorers look the case up by case_id: the trace carries only what the LLM saw."""
 
     def code(name, fn):
@@ -94,18 +102,29 @@ def make_scorers(records: dict[str, dict], judge: bool):
         rec = records[expectations["case_id"]]
         if not m.is_sent(rec):
             return None
-        score, rationale, cost = asyncio.run(judge_clarity(rec["output"]["draft"]["paragraph"]))
+        score, rationale, cost = asyncio.run(
+            _judge(llm, expectations["case_id"], rec["output"]["draft"]["paragraph"])
+        )
         rec |= {"clarity": score, "clarity_rationale": rationale, "judge_cost_usd": cost}
         return None if score is None else Feedback(value=score, rationale=rationale)
 
     return scorers + [clarity] if judge else scorers
 
 
-async def draft_all(cases: list[dict], prompt_uri: str, search, workers: int) -> dict:
-    """Run the pipeline on every case, `workers` at a time, on one event loop. One provider
-    (one HTTP client) for all of them, closed before the loop ends."""
+async def _judge(llm: Live | Replay, case_id: str, paragraph: str):
+    provider = llm.judge(case_id)
+    try:
+        return await judge_clarity(paragraph, provider)
+    finally:
+        await provider.aclose()
+
+
+async def draft_all(
+    cases: list[dict], prompt_uri: str, search, workers: int, llm: Live | Replay
+) -> dict:
+    """Run the pipeline on every case, `workers` at a time, on one event loop. One live
+    provider (one HTTP client) for all of them, closed before the loop ends."""
     limit = asyncio.Semaphore(workers)
-    provider = get_provider()
 
     async def one(row):
         async with limit:
@@ -113,7 +132,7 @@ async def draft_all(cases: list[dict], prompt_uri: str, search, workers: int) ->
                 r = await run_notice(
                     row["case"],
                     NOTICE_DATE,
-                    provider=provider,
+                    provider=llm.pipeline(row["case_id"]),
                     search=search,
                     prompt_uri=prompt_uri,
                 )
@@ -124,18 +143,26 @@ async def draft_all(cases: list[dict], prompt_uri: str, search, workers: int) ->
     try:
         done = await asyncio.gather(*map(one, cases))
     finally:
-        await provider.client.close()
+        await llm.aclose()
     return {cid: (out, tid) for cid, out, tid in done}
 
 
 def run_mode(
-    mode: str, version: int, cases: list[dict], *, judge: bool, full_set: bool, workers: int
+    mode: str,
+    version: int,
+    cases: list[dict],
+    *,
+    judge: bool,
+    full_set: bool,
+    workers: int,
+    replay: Replay | None = None,
 ) -> dict:
     """Drafting runs here, not as evaluate's predict_fn: inside evaluate's worker threads
     MLflow 3.15 deadlocked on lazy imports (2026-10-27). evaluate then scores the traces."""
     s = get_settings()
     prompt_uri = f"prompts:/{s.prompt_name}/{version}"
     search = fixed_search() if mode == "generation" else None
+    llm = replay or Live(record=full_set)
 
     targets = load_targets()
     stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
@@ -148,6 +175,7 @@ def run_mode(
                 "prompt_version": str(version),
                 "full_set": str(full_set).lower(),
                 "judge": str(judge).lower(),
+                "llm": "recorded" if replay else "live",
             }
         )
         mlflow.log_params(
@@ -155,7 +183,9 @@ def run_mode(
              "judge_model": JUDGE_MODEL_CONFIG["model"] if judge else "none",
              "fixed_sections": ",".join(FIXED_SECTIONS) if search else "pgvector"}
         )  # fmt: skip
-        drafted = asyncio.run(draft_all(cases, prompt_uri, search, workers))
+        if replay:
+            mlflow.log_param("recording", replay.path.name)
+        drafted = asyncio.run(draft_all(cases, prompt_uri, search, workers, llm))
         mlflow.flush_trace_async_logging()
         records = {row["case_id"]: {**row, "output": drafted[row["case_id"]][0]} for row in cases}
         data = []
@@ -166,7 +196,7 @@ def run_mode(
                 continue
             exp = {"case_id": row["case_id"], "group": row["group"], "expect": row["expect"]}
             data.append({"trace": trace, "expectations": exp})
-        mlflow.genai.evaluate(data=data, scorers=make_scorers(records, judge))
+        mlflow.genai.evaluate(data=data, scorers=make_scorers(records, judge, llm))
 
         records = list(records.values())
         metrics = m.aggregate(records)
@@ -195,7 +225,14 @@ def run_mode(
             "metrics": metrics,
             "targets": table,
         }
-        out_dir = RESULTS_DIR / mode
+        if replay:
+            result["replay"] = {"missing": replay.missing, "drift": replay.drift}
+            mlflow.log_metrics(
+                {"replay_missing": len(replay.missing), "replay_drift": len(replay.drift)}
+            )
+        elif full_set:
+            llm.write(recording_dir(version, _prompt_model(prompt_uri)) / f"{mode}-{stamp}.jsonl")
+        out_dir = RESULTS_DIR / "recorded" / mode if replay else RESULTS_DIR / mode
         out_dir.mkdir(parents=True, exist_ok=True)
         base = out_dir / f"v{version}-{stamp}"
         files = {
@@ -208,6 +245,11 @@ def run_mode(
             mlflow.log_artifact(str(path))
         mlflow.log_dict(targets, "targets.yaml")
     return result
+
+
+def _prompt_model(prompt_uri: str) -> str:
+    prompt = mlflow.genai.load_prompt(prompt_uri, link_to_model=False)
+    return (prompt.model_config or {}).get("model", get_settings().llm_model)
 
 
 def _fmt(v) -> str:
@@ -255,21 +297,38 @@ def main() -> None:
     parser.add_argument("--no-judge", action="store_true")
     parser.add_argument("--limit", type=int, help="first N cases only (smoke test, never gates)")
     parser.add_argument("--workers", type=int, default=4)
+    parser.add_argument("--llm", choices=["live", "recorded"], default="live")
     args = parser.parse_args()
 
     os.environ.setdefault("MLFLOW_GENAI_EVAL_MAX_WORKERS", str(args.workers))
     setup_tracing()
-    mlflow.set_experiment(get_settings().mlflow_eval_experiment)
+    recorded = args.llm == "recorded"
+    mlflow.set_experiment(eval_experiment(recorded))
     version = resolve_version(args.prompt)
     cases = load_cases()
     full_set = args.limit is None
     if not full_set:
         cases = cases[: args.limit]
+    opts = {"judge": not args.no_judge, "full_set": full_set, "workers": args.workers}
+    failed = False
     for mode in ["e2e", "generation"] if args.mode == "both" else [args.mode]:
-        result = run_mode(
-            mode, version, cases, judge=not args.no_judge, full_set=full_set, workers=args.workers
-        )
-        print(results_markdown(result))
+        if not recorded:
+            print(results_markdown(run_mode(mode, version, cases, **opts)))
+            continue
+        model = _prompt_model(f"prompts:/{get_settings().prompt_name}/{version}")
+        paths = recordings(version, model, mode)[-load_targets()["repeated_runs"] :]
+        if not paths:
+            where = recording_dir(version, model)
+            print(f"re-record needed: no {mode} recordings for prompt v{version} in {where}")
+            failed = True
+        for path in paths:
+            replay = Replay(path)
+            print(results_markdown(run_mode(mode, version, cases, **opts, replay=replay)))
+            print(f"replayed {path.name}: {len(replay.drift)} request(s) differ from it")
+            if replay.missing:
+                print(f"re-record needed: {len(replay.missing)} call(s) missing from {path.name}")
+                failed = True
+    sys.exit(1 if failed else 0)
 
 
 if __name__ == "__main__":

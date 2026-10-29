@@ -11,6 +11,10 @@ __pycache__/
 # MLflow local stores
 mlruns/
 mlflow.db
+mlflow-ci.db
+
+# Eval runs that replayed recorded responses (CI uploads them as an artifact)
+evals/results/recorded/
 
 # Data and model caches (data/denials.parquet and data/regb/ are committed)
 data/cache/

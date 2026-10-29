@@ -1,6 +1,7 @@
 """Release gate and rollback for the notice prompt.
 
-  uv run python -m app.llmops.gate check [VERSION]    exit 1 if VERSION misses a target (CI)
+  uv run python -m app.llmops.gate check [VERSION]    exit 1 if VERSION misses a target
+  uv run python -m app.llmops.gate check --recorded   the same, on CI's replayed eval runs
   uv run python -m app.llmops.gate promote VERSION    gate, then @previous <- @production <- VERSION
   uv run python -m app.llmops.gate rollback           @production <- @previous
 
@@ -9,6 +10,10 @@ VERSION is a number or an alias (default: candidate). The gate reads the latest
 evals/targets.yaml: count targets must hold on every run, rate targets on the mean, report
 targets (and gate: false) never block. A model change is a new prompt version (its
 model_config), so it goes through the same gate.
+
+CI runs `check --recorded`: the same targets and code, applied to eval runs that replayed
+recorded LLM responses. Those are logged to a separate "-recorded" experiment, so a replay
+can never count towards a real promotion.
 """
 
 import argparse
@@ -30,6 +35,11 @@ OPS = {">=": operator.ge, "<=": operator.le, "==": operator.eq}
 
 def load_targets(path: Path = TARGETS_PATH) -> dict:
     return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def eval_experiment(recorded: bool = False) -> str:
+    name = get_settings().mlflow_eval_experiment
+    return f"{name}-recorded" if recorded else name
 
 
 def gating(targets: dict) -> dict[str, dict]:
@@ -70,10 +80,10 @@ def resolve_version(ref: str) -> int:
     return int(mlflow.genai.load_prompt(uri, link_to_model=False).version)
 
 
-def eval_runs(version: int, n: int) -> list[dict[str, float | None]]:
+def eval_runs(version: int, n: int, recorded: bool = False) -> list[dict[str, float | None]]:
     s = get_settings()
     df = mlflow.search_runs(
-        experiment_names=[s.mlflow_eval_experiment],
+        experiment_names=[eval_experiment(recorded)],
         filter_string=(
             f"tags.prompt_name = '{s.prompt_name}' and tags.prompt_version = '{version}' "
             "and tags.eval_mode = 'e2e' and tags.full_set = 'true' "
@@ -89,10 +99,11 @@ def eval_runs(version: int, n: int) -> list[dict[str, float | None]]:
     ]
 
 
-def check(version: int) -> list[str]:
+def check(version: int, recorded: bool = False) -> list[str]:
     targets = load_targets()
-    misses = check_targets(eval_runs(version, targets["repeated_runs"]), targets)
-    print(f"prompt version {version}: " + ("meets every target" if not misses else "BLOCKED"))
+    misses = check_targets(eval_runs(version, targets["repeated_runs"], recorded), targets)
+    label = f"prompt version {version}" + (" (recorded responses)" if recorded else "")
+    print(f"{label}: " + ("meets every target" if not misses else "BLOCKED"))
     for m in misses:
         print(f"  missed {m}")
     return misses
@@ -135,7 +146,9 @@ def rollback() -> bool:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="gate")
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("check").add_argument("version", nargs="?", default="candidate")
+    check_cmd = sub.add_parser("check")
+    check_cmd.add_argument("version", nargs="?", default="candidate")
+    check_cmd.add_argument("--recorded", action="store_true", help="CI's replayed eval runs")
     sub.add_parser("promote").add_argument("version")
     sub.add_parser("rollback")
     args = parser.parse_args(argv)
@@ -144,7 +157,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if rollback() else 1
     version = resolve_version(args.version)
     if args.command == "check":
-        return 1 if check(version) else 0
+        return 1 if check(version, args.recorded) else 0
     return 0 if promote(version) else 1
 
 

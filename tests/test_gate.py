@@ -59,16 +59,23 @@ def two_versions(monkeypatch):
 
 def test_promote_refuses_a_version_that_misses_a_target(two_versions, monkeypatch):
     old, new = two_versions
-    monkeypatch.setattr(gate, "eval_runs", lambda v, n: [{**GOOD, "clarity": 3.1}] * 3)
+    monkeypatch.setattr(
+        gate, "eval_runs", lambda v, n, recorded=False: [{**GOOD, "clarity": 3.1}] * 3
+    )
     assert gate.promote(new) is False
     assert gate.resolve_version("production") == old
 
 
 def test_promote_then_rollback(two_versions, monkeypatch):
     old, new = two_versions
-    monkeypatch.setattr(gate, "eval_runs", lambda v, n: [GOOD] * 3)
+    monkeypatch.setattr(gate, "eval_runs", lambda v, n, recorded=False: [GOOD] * 3)
     assert gate.promote(new) is True
     assert gate.resolve_version("production") == new
     assert gate.resolve_version("previous") == old
     assert gate.rollback() is True
     assert gate.resolve_version("production") == old
+
+
+def test_replayed_runs_never_count_towards_a_promotion():
+    assert gate.eval_experiment() == get_settings().mlflow_eval_experiment
+    assert gate.eval_experiment(recorded=True) == f"{gate.eval_experiment()}-recorded"
