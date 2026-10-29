@@ -1,15 +1,15 @@
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import ReviewItem
 
 
-def add_item(session: Session, item: ReviewItem) -> ReviewItem:
+async def add_item(session: AsyncSession, item: ReviewItem) -> ReviewItem:
     session.add(item)
-    session.flush()
+    await session.flush()
     return item
 
 
-def list_pending(session: Session) -> list[ReviewItem]:
+async def list_pending(session: AsyncSession) -> list[ReviewItem]:
     stmt = select(ReviewItem).where(ReviewItem.status == "pending").order_by(ReviewItem.id)
-    return list(session.scalars(stmt))
+    return list(await session.scalars(stmt))

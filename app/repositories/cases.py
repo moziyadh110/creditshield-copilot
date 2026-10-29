@@ -13,7 +13,7 @@ class CaseNotFound(LookupError):
 
 
 @lru_cache
-def _denials() -> dict[int, DenialCase]:
+def load_denials() -> dict[int, DenialCase]:
     df = pd.read_parquet(get_settings().denials_path)
     return {
         int(row.applicant_id): DenialCase(
@@ -30,6 +30,6 @@ def get_case(applicant_id: int) -> DenialCase:
     if get_settings().case_source != "file":
         raise NotImplementedError("CASE_SOURCE=api (live CreditShield) is not built yet")
     try:
-        return _denials()[applicant_id]
+        return load_denials()[applicant_id]
     except KeyError:
         raise CaseNotFound(f"applicant {applicant_id} is not in denials.parquet") from None

@@ -11,6 +11,8 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.repositories.reason_codes import get_reason_catalog
 
+MAX_NOTE_CHARS = 1000
+
 
 class CaseReason(BaseModel):
     rank: int = Field(ge=1, le=4)
@@ -25,7 +27,8 @@ class DenialCase(BaseModel):
     decision: Literal["DENY", "MANUAL_REVIEW"]
     product: str
     reasons: list[CaseReason] = Field(min_length=1, max_length=4)
-    applicant_note: str | None = None
+    # Input-size cap: a longer note is invalid case data, so the case escalates with no LLM call.
+    applicant_note: str | None = Field(default=None, max_length=MAX_NOTE_CHARS)
     synthetic: bool = False
 
     @field_validator("reasons")

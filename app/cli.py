@@ -20,7 +20,8 @@ def _print_result(r) -> None:
         )
     if not r.checks:
         print("  (none run)")
-    print(f"Outcome: {r.outcome}  |  prompt v{r.prompt_version}  |  model {r.model}")
+    cached = " (cache hit, no LLM call)" if r.cache_hit else ""
+    print(f"Outcome: {r.outcome}{cached}  |  prompt v{r.prompt_version}  |  model {r.model}")
     u = r.usage
     print(
         f"LLM calls {u.calls}  |  tokens {u.prompt_tokens} in / {u.completion_tokens} out  |  "
