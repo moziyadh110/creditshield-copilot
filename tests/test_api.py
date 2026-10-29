@@ -174,6 +174,12 @@ def test_manual_review_is_202_and_queued(api):
     assert provider.calls == calls
     queued = {item["id"]: item for item in client.get("/review-queue").json()}
     assert queued[body["review_id"]]["applicant_id"] == MANUAL
+    # A repeat request refreshes the same pending item instead of queuing the case again.
+    again = client.post("/notices", json={"applicant_id": MANUAL}).json()
+    assert again["review_id"] == body["review_id"] and again["run_id"] != body["run_id"]
+    pending = [i for i in client.get("/review-queue").json() if i["applicant_id"] == MANUAL]
+    assert [i["id"] for i in pending] == [body["review_id"]]
+    assert pending[0]["run_id"] == again["run_id"]
 
 
 def test_budget_reached_fails_closed_without_llm_call(api, monkeypatch):

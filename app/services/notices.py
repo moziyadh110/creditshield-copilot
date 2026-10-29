@@ -410,23 +410,24 @@ async def _save(r: NoticeResult, sessions: async_sessionmaker, today: date) -> N
         )
         r.run_id = row.id
         if r.outcome == "escalated":
-            item = await review_queue.add_item(
-                s,
-                ReviewItem(
-                    applicant_id=r.applicant_id,
-                    decision=r.decision,
-                    reason=r.escalation_reason,
-                    check_results=checks,
-                    draft=draft,
-                    run_id=r.run_id,
-                    trace_id=r.trace_id,
-                ),
-            )
+            fields = {
+                "decision": r.decision,
+                "reason": r.escalation_reason,
+                "check_results": checks,
+                "draft": draft,
+                "run_id": r.run_id,
+                "trace_id": r.trace_id,
+            }
+            # One pending item per applicant: a repeat request refreshes it to the latest
+            # run instead of queuing the same case again.
+            item = await review_queue.pending_for(s, r.applicant_id)
+            if item is None:
+                item = await review_queue.add_item(
+                    s, ReviewItem(applicant_id=r.applicant_id, **fields)
+                )
+            else:
+                for k, v in fields.items():
+                    setattr(item, k, v)
             r.review_id = item.id
         if r.usage.cost_usd > 0:
             await spend.add_spend(s, today, r.usage.cost_usd)
-
-
-async def pending_reviews(sessions: async_sessionmaker) -> list[ReviewItem]:
-    async with sessions() as s:
-        return await review_queue.list_pending(s)

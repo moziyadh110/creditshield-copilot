@@ -72,7 +72,9 @@ class RunLog(Base):
 
 class ReviewItem(Base):
     """A case a person must handle: escalated, blocked by a check, or a tool failure.
-    Nothing in this queue is ever sent automatically."""
+    Nothing in this queue is ever sent automatically. A reviewer approves (status
+    "approved": final_draft passed every check and final_notice is the letter to send) or
+    rejects (status "rejected": handled outside the Copilot, reviewer_note says how)."""
 
     __tablename__ = "review_queue"
 
@@ -86,6 +88,8 @@ class ReviewItem(Base):
     trace_id: Mapped[str | None] = mapped_column(String(64))
     status: Mapped[str] = mapped_column(String(16), server_default="pending", index=True)
     reviewer_note: Mapped[str | None] = mapped_column(Text)
+    final_draft: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    final_notice: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

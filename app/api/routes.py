@@ -4,10 +4,20 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from app.api.auth import require_api_key
-from app.api.schemas import NoticeRequest, NoticeSent, ReviewQueueItem, SentToReview
+from app.api.schemas import (
+    ApproveRequest,
+    NoticeRequest,
+    NoticeSent,
+    RejectRequest,
+    ReviewQueueItem,
+    ReviewResolved,
+    SentToReview,
+)
 from app.logs import request_id
 from app.repositories.cases import CaseNotFound
-from app.services.notices import draft_notice, pending_reviews
+from app.schemas import NoticeDraft
+from app.services import reviews
+from app.services.notices import draft_notice
 
 router = APIRouter()
 
@@ -61,4 +71,52 @@ async def create_notice(body: NoticeRequest, request: Request):
     response_model=list[ReviewQueueItem],
 )
 async def review_queue(request: Request):
-    return await pending_reviews(request.app.state.deps.sessions)
+    return await reviews.pending(request.app.state.deps.sessions)
+
+
+def _resolved(r: reviews.Resolved) -> ReviewResolved:
+    return ReviewResolved(
+        review_id=r.review_id, status=r.status, notice=r.notice, check_results=r.checks
+    )
+
+
+@router.post(
+    "/review-queue/{review_id}/approve",
+    dependencies=[Depends(require_api_key)],
+    response_model=ReviewResolved,
+    responses={
+        404: {"description": "Unknown review item or applicant"},
+        409: {"description": "Already resolved, or not a denial"},
+        422: {"description": "The draft fails a check; the item stays pending"},
+    },
+)
+async def approve_review(review_id: int, body: ApproveRequest, request: Request):
+    draft = NoticeDraft(reasons=body.reasons, paragraph=body.paragraph)
+    try:
+        r = await reviews.approve(
+            request.app.state.deps.sessions, review_id, draft, body.reviewer_note
+        )
+    except (reviews.ReviewNotFound, CaseNotFound) as e:
+        raise HTTPException(status_code=404, detail=str(e)) from None
+    except reviews.ReviewConflict as e:
+        raise HTTPException(status_code=409, detail=str(e)) from None
+    except reviews.ChecksFailed as e:
+        failed = [c.model_dump() for c in e.checks if not c.passed]
+        raise HTTPException(status_code=422, detail={"failed_checks": failed}) from None
+    return _resolved(r)
+
+
+@router.post(
+    "/review-queue/{review_id}/reject",
+    dependencies=[Depends(require_api_key)],
+    response_model=ReviewResolved,
+    responses={404: {"description": "Unknown review item"}, 409: {"description": "Resolved"}},
+)
+async def reject_review(review_id: int, body: RejectRequest, request: Request):
+    try:
+        r = await reviews.reject(request.app.state.deps.sessions, review_id, body.reviewer_note)
+    except reviews.ReviewNotFound as e:
+        raise HTTPException(status_code=404, detail=str(e)) from None
+    except reviews.ReviewConflict as e:
+        raise HTTPException(status_code=409, detail=str(e)) from None
+    return _resolved(r)

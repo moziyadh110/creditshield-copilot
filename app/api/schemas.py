@@ -3,7 +3,9 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.schemas import CheckResult, NoticeDraft
 
 
 class NoticeRequest(BaseModel):
@@ -45,3 +47,20 @@ class ReviewQueueItem(BaseModel):
     run_id: int | None
     trace_id: str | None
     created_at: datetime
+    # A draft to start from: the LLM's draft, or catalog wording for a denial with no draft.
+    suggested_draft: dict[str, Any] | None = None
+
+
+class ApproveRequest(NoticeDraft):
+    reviewer_note: str | None = Field(default=None, max_length=2000)
+
+
+class RejectRequest(BaseModel):
+    reviewer_note: str = Field(min_length=3, max_length=2000)
+
+
+class ReviewResolved(BaseModel):
+    review_id: int
+    status: Literal["approved", "rejected"]
+    notice: str | None
+    check_results: list[CheckResult]
