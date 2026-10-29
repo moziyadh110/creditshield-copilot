@@ -1,8 +1,15 @@
 # Each target is a thin wrapper: on Windows without make, run the uv command directly.
-.PHONY: db mlflow migrate prompts fetch-regb ingest draft api eval eval-cases check promote rollback test lint
+.PHONY: db up down mlflow migrate prompts fetch-regb ingest draft api replay monitor eval eval-recorded eval-cases check promote rollback test lint
 
 db:
 	docker compose up -d --wait db
+
+# The whole stack in Docker: db, MLflow (5001), setup, the API (8001). Stop `make mlflow` first.
+up:
+	docker compose up -d --wait --build
+
+down:
+	docker compose down
 
 # MLflow UI on http://localhost:5001. psycopg2 is named explicitly: SQLAlchemy 2.1 defaults
 # postgresql:// to psycopg 3, which breaks MLflow's prompt-version lookups.
@@ -28,11 +35,24 @@ draft:
 api:
 	uv run uvicorn app.api.main:app --host 127.0.0.1 --port 8001
 
+# A day of demo traffic: every case in denials.parquet through the running API.
+replay:
+	uv run python -m app.llmops.replay
+
+# Daily metrics and alerts from today's traces; ARGS=--test-alert fires a test alert.
+monitor:
+	uv run python -m app.llmops.monitor $(ARGS)
+
 # PROMPT is a version number or alias; MODE is e2e, generation or both.
 PROMPT ?= candidate
 MODE ?= both
 eval:
 	uv run python -m evals.runner --prompt $(PROMPT) --mode $(MODE)
+
+# What CI runs: the candidate's recorded responses, no API key, then the gate on those runs.
+eval-recorded:
+	uv run python -m evals.runner --prompt candidate --mode e2e --llm recorded
+	uv run python -m app.llmops.gate check candidate --recorded
 
 eval-cases:
 	uv run python -m evals.build_cases
