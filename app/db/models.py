@@ -1,8 +1,20 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import JSON, BigInteger, DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    Boolean,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 # BAAI/bge-small-en-v1.5 output size. Changing the embedding model means a new migration.
@@ -53,6 +65,8 @@ class RunLog(Base):
     cost_usd: Mapped[float] = mapped_column(Float)
     latency_ms: Mapped[int] = mapped_column(Integer)
     trace_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    # Served from the response cache: no LLM call, the notice of an earlier passing run.
+    cache_hit: Mapped[bool] = mapped_column(Boolean, server_default="false")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -74,3 +88,15 @@ class ReviewItem(Base):
     reviewer_note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class DailySpend(Base):
+    """LLM spend per UTC day, for the DAILY_BUDGET_USD cap. One row per day."""
+
+    __tablename__ = "daily_spend"
+
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    cost_usd: Mapped[float] = mapped_column(Float, server_default="0")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
