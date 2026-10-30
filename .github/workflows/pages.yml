@@ -3,7 +3,7 @@ name: Demo site
 on:
   push:
     branches: [main]
-    paths: ["site/**", "evals/results/e2e/**", ".github/workflows/pages.yml"]
+    paths: ["site/**", "evals/results/e2e/**", "evals/cases.jsonl", "data/reason_codes.yaml", ".github/workflows/pages.yml"]
   workflow_dispatch:
 
 permissions:
@@ -27,7 +27,7 @@ jobs:
       - name: Assemble site
         run: |
           mkdir -p _site/runs
-          cp site/index.html _site/
+          cp site/index.html data/reason_codes.yaml evals/cases.jsonl _site/
           for v in v1 v2 v3 v4 v5; do
             cp "$(ls evals/results/e2e/$v-*.cases.jsonl | sort | tail -1)" "_site/runs/$v.jsonl"
           done
