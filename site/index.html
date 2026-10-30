@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CreditShield Copilot</title>
+<meta name="description" content="Browse 50 recorded eval cases: what the LLM saw, the seven code checks, and the adverse action notice or the reason it went to a person.">
+<style>
+:root {
+  --bg: #f7f7f5; --panel: #fff; --text: #1d1d1b; --muted: #66665f; --line: #e3e2dc;
+  --accent: #1f5f8b; --accent-soft: #e5eef5; --ok: #1f7a4d; --ok-soft: #e3f2ea;
+  --warn: #9a5b00; --warn-soft: #fbefdc; --bad: #a3302a; --bad-soft: #f8e4e2;
+  --mono: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #151615; --panel: #1e201f; --text: #e8e8e3; --muted: #a2a29a; --line: #33352f;
+    --accent: #7db4dc; --accent-soft: #1f3040; --ok: #6fcf9b; --ok-soft: #1b3326;
+    --warn: #e7b25e; --warn-soft: #3a2c15; --bad: #ee8a83; --bad-soft: #3d1f1d;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+a { color: var(--accent); }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 16px; }
+header { padding: 32px 0 20px; border-bottom: 1px solid var(--line); }
+h1 { margin: 0 0 6px; font-size: 28px; letter-spacing: -0.01em; }
+.pitch { margin: 0 0 10px; font-size: 17px; max-width: 760px; }
+.links { display: flex; gap: 16px; flex-wrap: wrap; font-size: 14px; }
+.note { font-size: 13px; color: var(--muted); margin: 10px 0 0; max-width: 760px; }
+.flow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 20px 0 0; font-size: 13px; }
+.flow span { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 4px 9px; }
+.flow i { color: var(--muted); font-style: normal; }
+.bar { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; padding: 18px 0; }
+select { font: inherit; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--line);
+  background: var(--panel); color: var(--text); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font: inherit; font-size: 13px; padding: 4px 10px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--panel); color: var(--text); }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 18px; }
+.stat { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.stat b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; }
+.stat small { color: var(--muted); font-size: 12px; }
+.main { display: grid; grid-template-columns: 290px 1fr; gap: 18px; padding-bottom: 40px; }
+.list { background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+  max-height: 78vh; overflow: auto; }
+.case { display: block; width: 100%; text-align: left; font: inherit; color: inherit; background: none;
+  border: 0; border-bottom: 1px solid var(--line); padding: 9px 12px; cursor: pointer; }
+.case:hover { background: var(--accent-soft); }
+.case[aria-current="true"] { background: var(--accent-soft); box-shadow: inset 3px 0 var(--accent); }
+.case .id { font-family: var(--mono); font-size: 13px; }
+.case .desc { display: block; font-size: 12px; color: var(--muted); }
+.tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px;
+  margin-left: 6px; vertical-align: 1px; }
+.sent { background: var(--ok-soft); color: var(--ok); }
+.revised { background: var(--warn-soft); color: var(--warn); }
+.escalated { background: var(--bad-soft); color: var(--bad); }
+.detail { display: grid; gap: 14px; min-width: 0; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; min-width: 0; }
+.card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 0 0 10px; }
+.card h2 em { font-style: normal; text-transform: none; letter-spacing: 0; }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+pre { margin: 0; font: 13px/1.5 var(--mono); white-space: pre-wrap; word-break: break-word; }
+.letter { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; }
+.letter mark { background: var(--accent-soft); color: inherit; border-radius: 3px; padding: 1px 0; }
+.checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.checks li { display: flex; gap: 8px; font-size: 14px; }
+.checks .icon { font-weight: 700; width: 16px; flex: none; }
+.checks .pass { color: var(--ok); } .checks .fail { color: var(--bad); }
+.checks small { color: var(--muted); display: block; }
+.esc { background: var(--bad-soft); color: var(--text); border-radius: 6px; padding: 12px 14px; }
+.esc b { color: var(--bad); }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--muted); }
+.meta b { color: var(--text); font-weight: 600; }
+.quote { font-size: 14px; border-left: 3px solid var(--warn); padding: 4px 10px; margin: 8px 0 0; background: var(--warn-soft); }
+.muted { color: var(--muted); font-size: 13px; }
+footer { border-top: 1px solid var(--line); padding: 18px 0 28px; font-size: 13px; color: var(--muted); }
+@media (max-width: 860px) {
+  .main, .cols { grid-template-columns: 1fr; }
+  .list { max-height: 260px; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>CreditShield Copilot</h1>
+    <p class="pitch">The model decides, the LLM only explains, and nothing ships unless every reason traces back to a SHAP feature.</p>
+    <div class="links">
+      <a href="https://github.com/moziyadh110/creditshield-copilot">Source on GitHub</a>
+      <a href="https://github.com/moziyadh110/creditshield-copilot/blob/main/docs/design.md">Design doc</a>
+      <a href="https://github.com/moziyadh110/creditshield-copilot/blob/main/docs/eval_report.md">Eval report</a>
+      <a href="https://github.com/moziyadh110/creditshield-copilot/blob/main/docs/system_card.md">System card</a>
+    </div>
+    <div class="flow" aria-label="Pipeline">
+      <span>CreditShield denial + top 4 SHAP features</span><i>→</i>
+      <span>Input allow-list</span><i>→</i>
+      <span>LLM drafts the reasons</span><i>→</i>
+      <span>7 checks in code</span><i>→</i>
+      <span>Fixed legal template</span><i>or</i>
+      <span>Human review queue</span>
+    </div>
+    <p class="note">These are the real, unedited outputs of recorded eval runs: 50 cases, including prompt-injection and proxy-bait attacks. Simplified, not legal advice. Public Home Credit data, synthetic applicant IDs and a fictional creditor.</p>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="bar">
+    <label>Prompt version
+      <select id="version">
+        <option value="v1">v1 · @production</option>
+        <option value="v2">v2 · passes the gate, not promoted</option>
+        <option value="v3">v3</option>
+        <option value="v4">v4</option>
+        <option value="v5">v5 · @candidate</option>
+      </select>
+    </label>
+    <div class="chips" id="groups" role="group" aria-label="Case group"></div>
+  </div>
+  <div class="stats" id="stats"></div>
+  <div class="main">
+    <nav class="list" id="list" aria-label="Cases"></nav>
+    <section class="detail" id="detail"><p class="muted">Loading…</p></section>
+  </div>
+</div>
+
+<footer>
+  <div class="wrap">Built with LangGraph, DeepSeek, pgvector, Presidio, FastAPI and MLflow. Decisions come from <a href="https://github.com/moziyadh110/fair-lend-ml">CreditShield</a>; this page only replays recorded results.</div>
+</footer>
+
+<script>
+const GROUPS = { all: "All", typical: "Typical", edge: "Edge", must_escalate: "Must escalate",
+  injection: "Prompt injection", proxy_bait: "Proxy bait" };
+const CHECKS = {
+  faithfulness: "Faithfulness: features and order match the SHAP output",
+  banned_wording: "Banned wording for each feature",
+  protected_attributes: "No protected attributes or cutoff logic",
+  personal_data: "No personal data (Presidio)",
+  prompt_injection: "Applicant note not followed or echoed",
+  required_content: "Required Reg B content present",
+  reading_level: "Reading level at or below grade 8",
+};
+const state = { version: "v1", group: "all", rows: [], id: decodeURIComponent(location.hash.slice(1)) || null };
+const cache = {};
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const median = (xs) => { const s = [...xs].sort((a, b) => a - b); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+
+async function load(version) {
+  if (!cache[version]) {
+    const text = await (await fetch(`runs/${version}.jsonl`)).text();
+    cache[version] = text.trim().split("\n").map((l) => JSON.parse(l));
+  }
+  return cache[version];
+}
+
+function stat(value, label) { return `<div class="stat"><b>${value}</b><small>${label}</small></div>`; }
+
+function renderStats() {
+  const rows = state.rows, out = rows.map((r) => r.output);
+  const count = (k) => out.filter((o) => o.outcome === k).length;
+  const drafted = out.filter((o) => o.llm_calls > 0);
+  const scored = rows.filter((r) => r.clarity != null);
+  $("stats").innerHTML = [
+    stat(count("sent") + count("revised"), "notices sent"),
+    stat(count("revised"), "of them revised once"),
+    stat(count("escalated"), "sent to a person"),
+    stat(rows.filter((r) => r.expect === "escalate" && r.output.outcome === "escalated").length + " / " + rows.filter((r) => r.expect === "escalate").length, "must-escalate caught"),
+    stat(scored.length ? (scored.reduce((a, r) => a + r.clarity, 0) / scored.length).toFixed(2) : "–", "clarity, this run (judge, 1–5)"),
+    stat(drafted.length ? "$" + median(drafted.map((o) => o.cost_usd)).toFixed(5) : "–", "median cost per notice"),
+  ].join("");
+}
+
+function visible() { return state.rows.filter((r) => state.group === "all" || r.group === state.group); }
+
+function renderList() {
+  const rows = visible();
+  if (!rows.some((r) => r.case_id === state.id)) state.id = rows[0]?.case_id;
+  $("list").innerHTML = rows.map((r) => `
+    <button class="case" data-id="${esc(r.case_id)}" aria-current="${r.case_id === state.id}">
+      <span class="id">${esc(r.case_id)}</span><span class="tag ${r.output.outcome}">${r.output.outcome}</span>
+      <span class="desc">${esc(r.description)}</span>
+    </button>`).join("");
+  $("list").querySelector('[aria-current="true"]')?.scrollIntoView({ block: "nearest" });
+}
+
+function compactJson(input) {
+  const reasons = input.reasons.map((x) => "    " + JSON.stringify(x)).join(",\n");
+  return `{\n  "product": ${JSON.stringify(input.product)},\n  "reasons": [\n${reasons}\n  ],\n  "applicant_note": ${JSON.stringify(input.applicant_note)}\n}`;
+}
+
+function letterHtml(notice, paragraph) {
+  const safe = esc(notice);
+  const p = esc(paragraph);
+  return p && safe.includes(p) ? safe.replace(p, `<mark>${p}</mark>`) : safe;
+}
+
+function renderDetail() {
+  const r = state.rows.find((x) => x.case_id === state.id);
+  if (!r) { $("detail").innerHTML = '<p class="muted">No cases in this group.</p>'; return; }
+  const c = r.case, o = r.output, noLlm = o.llm_calls === 0;
+  const input = { product: c.product, reasons: (c.reasons || []).map((x) => ({ rank: x?.rank, feature: x?.feature })), applicant_note: c.applicant_note };
+  const checks = (o.checks || []).map((k) => `
+    <li><span class="icon ${k.passed ? "pass" : "fail"}">${k.passed ? "✓" : "✗"}</span>
+    <span>${esc(CHECKS[k.name] || k.name)}${k.detail ? `<small>${esc(k.detail)}</small>` : ""}</span></li>`).join("");
+  const outcome = o.outcome === "escalated"
+    ? `<div class="esc"><b>Sent to the human review queue.</b> No letter goes to the applicant.<br>${esc(o.escalation_reason)}</div>`
+    : `<pre class="letter">${letterHtml(o.notice, o.draft?.paragraph)}</pre>
+       <p class="muted">Highlighted: the only part the LLM wrote. The template supplies everything else.${o.outcome === "revised" ? " The first draft failed a fixable check, so the agent revised it once." : ""}</p>`;
+  const meta = noLlm ? "<span><b>No LLM call</b></span>" : `
+    <span>LLM calls <b>${o.llm_calls}</b></span>
+    <span>Cost <b>$${o.cost_usd.toFixed(5)}</b></span>
+    <span>Latency <b>${(o.latency_ms / 1000).toFixed(1)} s</b></span>
+    ${o.retrieved?.length ? `<span>Reg B sections retrieved <b>${o.retrieved.map(esc).join(", ")}</b></span>` : ""}
+    ${r.clarity != null ? `<span>Clarity (judge) <b>${r.clarity} / 5</b></span>` : ""}`;
+  $("detail").innerHTML = `
+    <div class="card">
+      <h2><em>${esc(r.case_id)} · ${esc(GROUPS[r.group])}${r.synthetic ? " · synthetic case" : ""} · applicant #${esc(c.applicant_id)} · ${esc(c.decision)}</em></h2>
+      <div>${esc(r.description)}</div>
+      ${c.applicant_note ? `<p class="quote"><b>Applicant note:</b> ${esc(c.applicant_note)}</p>` : ""}
+      <div class="meta" style="margin-top:10px">${meta}</div>
+    </div>
+    <div class="cols">
+      <div class="card"><h2>What the LLM saw</h2>
+        ${noLlm ? '<p class="muted">Nothing. This case is routed to a person before any LLM call.</p>'
+          : `<pre>${esc(compactJson(input))}</pre><p class="muted">Allow-listed fields only: no score, cutoff, feature values or age. Presidio masks personal data in the note first.</p>`}
+      </div>
+      <div class="card"><h2>Seven checks in code</h2>
+        ${checks ? `<ul class="checks">${checks}</ul>` : '<p class="muted">Not run: there is no draft to check.</p>'}
+      </div>
+    </div>
+    <div class="card"><h2>Outcome</h2>${outcome}
+      ${r.clarity_rationale ? `<p class="muted"><b>Judge:</b> ${esc(r.clarity_rationale)}</p>` : ""}
+    </div>`;
+}
+
+function render() { renderStats(); renderList(); renderDetail(); }
+
+$("groups").innerHTML = Object.entries(GROUPS).map(([k, v]) =>
+  `<button class="chip" data-group="${k}" aria-pressed="${k === "all"}">${v}</button>`).join("");
+$("groups").addEventListener("click", (e) => {
+  const b = e.target.closest(".chip"); if (!b) return;
+  state.group = b.dataset.group;
+  document.querySelectorAll(".chip").forEach((x) => x.setAttribute("aria-pressed", x === b));
+  renderList(); renderDetail();
+});
+$("list").addEventListener("click", (e) => {
+  const b = e.target.closest(".case"); if (!b) return;
+  state.id = b.dataset.id; history.replaceState(null, "", "#" + state.id); renderList(); renderDetail();
+  if (window.innerWidth <= 860) $("detail").scrollIntoView({ behavior: "smooth" });
+});
+$("version").addEventListener("change", async (e) => {
+  state.version = e.target.value; state.rows = await load(state.version); render();
+});
+load(state.version).then((rows) => { state.rows = rows; render(); })
+  .catch((e) => { $("detail").innerHTML = `<p class="muted">Couldn't load the recorded runs (${esc(e.message)}).</p>`; });
+</script>
+</body>
+</html>

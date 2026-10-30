@@ -1,0 +1,38 @@
+name: Demo site
+
+on:
+  push:
+    branches: [main]
+    paths: ["site/**", "evals/results/e2e/**", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+      # The page replays the latest recorded end-to-end eval run of each prompt version.
+      - name: Assemble site
+        run: |
+          mkdir -p _site/runs
+          cp site/index.html _site/
+          for v in v1 v2 v3 v4 v5; do
+            cp "$(ls evals/results/e2e/$v-*.cases.jsonl | sort | tail -1)" "_site/runs/$v.jsonl"
+          done
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
