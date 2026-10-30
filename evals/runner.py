@@ -55,23 +55,6 @@ def fixed_search():
     return lambda query: chunks
 
 
-def _output(r) -> dict:
-    return {
-        "outcome": r.outcome,
-        "escalation_reason": r.escalation_reason,
-        "draft": r.draft.model_dump() if r.draft else None,
-        "notice": r.notice,
-        "checks": [c.model_dump() for c in r.checks],
-        "retrieved": r.retrieved_chunk_ids,
-        "llm_calls": r.usage.calls,
-        "prompt_tokens": r.usage.prompt_tokens,
-        "completion_tokens": r.usage.completion_tokens,
-        "cost_usd": r.usage.cost_usd,
-        "latency_ms": r.latency_ms,
-        "model": r.model,
-    }
-
-
 def _error_output(e: Exception) -> dict:
     return {"outcome": "error", "escalation_reason": f"{type(e).__name__}: {e}", "draft": None,
             "notice": None, "checks": [], "retrieved": [], "llm_calls": 0, "prompt_tokens": 0,
@@ -136,7 +119,7 @@ async def draft_all(
                     search=search,
                     prompt_uri=prompt_uri,
                 )
-                return row["case_id"], _output(r), r.trace_id
+                return row["case_id"], r.summary(), r.trace_id
             except Exception as e:  # recorded as a failed case, never silently dropped
                 return row["case_id"], _error_output(e), None
 

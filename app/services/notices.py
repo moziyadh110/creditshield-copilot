@@ -58,6 +58,23 @@ class NoticeResult:
     review_id: int | None = None
     cache_hit: bool = False
 
+    def summary(self) -> dict[str, Any]:
+        """The JSON shape of an eval result's `output` (the demo site renders both)."""
+        return {
+            "outcome": self.outcome,
+            "escalation_reason": self.escalation_reason,
+            "draft": self.draft.model_dump() if self.draft else None,
+            "notice": self.notice,
+            "checks": [c.model_dump() for c in self.checks],
+            "retrieved": self.retrieved_chunk_ids,
+            "llm_calls": self.usage.calls,
+            "prompt_tokens": self.usage.prompt_tokens,
+            "completion_tokens": self.usage.completion_tokens,
+            "cost_usd": self.usage.cost_usd,
+            "latency_ms": self.latency_ms,
+            "model": self.model,
+        }
+
 
 @cache
 def _sessions():
