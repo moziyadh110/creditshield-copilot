@@ -14,8 +14,11 @@ from dataclasses import dataclass
 from typing import Any
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
+from app.api.demo import router as demo_router
+from app.api.demo import site as demo_site
 from app.api.routes import router
 from app.config import get_settings
 from app.db.session import make_async_engine, make_async_sessionmaker
@@ -24,6 +27,7 @@ from app.llmops.tracing import setup_tracing
 from app.logs import request_id, setup_logging
 from app.repositories.cases import load_denials
 from app.retrieval.embeddings import get_model
+from app.services.demo import RateLimiter
 from app.services.notices import pgvector_search
 
 log = logging.getLogger("copilot.api")
@@ -100,6 +104,15 @@ def create_app(
             request_id.reset(token)
 
     app.include_router(router)
+    settings = get_settings()
+    if settings.demo_enabled:
+        app.state.demo_limiter = RateLimiter(settings.demo_per_minute, settings.demo_per_day)
+        app.add_middleware(
+            CORSMiddleware, allow_origins=settings.demo_origins, allow_methods=["POST"],
+            allow_headers=["Content-Type"],
+        )  # fmt: skip
+        app.include_router(demo_router)
+        app.include_router(demo_site)
     return app
 
 

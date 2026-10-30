@@ -25,7 +25,7 @@ from app.repositories.cases import CaseNotFound
 from app.schemas import DenialCase
 
 KEY = "test-key"
-SENT, MANUAL, BUDGET, STALE = 990101, 990102, 990103, 990104
+SENT, MANUAL, BUDGET, STALE, DEMO = 990101, 990102, 990103, 990104, 990105
 CASES = {
     i: DenialCase(
         applicant_id=i,
@@ -94,7 +94,7 @@ def _clean(sessions):
     with sessions() as s, s.begin():
         for table in ("review_queue", "run_log"):
             sql = f"delete from {table} where applicant_id = any(:ids)"
-            s.execute(text(sql), {"ids": [*CASES]})
+            s.execute(text(sql), {"ids": [*CASES, DEMO]})
 
 
 @pytest.fixture
@@ -235,3 +235,69 @@ def test_cached_notice_that_fails_current_checks_is_redrafted(api, db):
     r = client.post("/notices", json={"applicant_id": STALE})
     assert r.status_code == 200 and r.json()["cache_hit"] is False
     assert provider.calls > calls and "your age" not in r.json()["notice"]
+
+
+def test_demo_route_is_off_by_default(api):
+    client, _, _ = api
+    assert client.post("/demo/notices", json={"case_id": "typical-01"}).status_code == 404
+
+
+@pytest.fixture
+def demo(db, monkeypatch, tmp_path):
+    """The public demo with one synthetic case, a 2-a-minute limit and no API key."""
+    from app.api.main import create_app
+    from app.services import demo as demo_service
+
+    cases = tmp_path / "cases.jsonl"
+    case = CASES[SENT].model_dump() | {"applicant_id": DEMO, "applicant_note": "stored note"}
+    cases.write_text(json.dumps({"case_id": "demo-01", "case": case}) + "\n", encoding="utf-8")
+    settings = get_settings().model_copy(
+        update={"demo_enabled": True, "demo_cases_path": cases, "demo_per_minute": 2,
+                "daily_budget_usd": None}
+    )  # fmt: skip
+    for module in ("app.api.main", "app.api.demo", "app.services.demo", "app.services.notices"):
+        monkeypatch.setattr(f"{module}.get_settings", lambda: settings)
+    demo_service._cases.cache_clear()
+    with TestClient(create_app(provider=ScriptedProvider(), search=lambda q: [Chunk()])) as c:
+        yield c
+    demo_service._cases.cache_clear()
+
+
+def test_demo_drafts_a_case_without_an_api_key_and_masks_the_note(demo):
+    note = "Please call me on 555-201-4477."
+    r = demo.post("/demo/notices", json={"case_id": "demo-01", "applicant_note": note})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["output"]["outcome"] in {"sent", "revised"} and body["output"]["notice"]
+    assert body["case"]["applicant_note"] == note
+    sent = json.dumps(body["agent_input"])  # what the LLM received
+    assert "555-201-4477" not in sent and "impact_score" not in sent and str(DEMO) not in sent
+
+
+def test_demo_rejects_unknown_cases_and_limits_each_client(demo):
+    assert demo.post("/demo/notices", json={"case_id": "nope"}).status_code == 404
+    other = {"X-Forwarded-For": "203.0.113.9"}
+    codes = [demo.post("/demo/notices", json={"case_id": "demo-01"}, headers=other).status_code
+             for _ in range(3)]  # fmt: skip
+    assert codes == [200, 200, 429]
+
+
+def test_demo_allows_the_site_origin_only(demo):
+    def allowed(origin):
+        r = demo.options(
+            "/demo/notices",
+            headers={"Origin": origin, "Access-Control-Request-Method": "POST"},
+        )
+        return r.headers.get("access-control-allow-origin") == origin
+
+    assert allowed("https://moziyadh110.github.io") and not allowed("https://evil.example")
+
+
+def test_rate_limiter_windows():
+    from app.services.demo import RateLimiter
+
+    limit = RateLimiter(per_minute=2, per_day=3)
+    assert [limit.allow("a", t) for t in (0, 1, 2)] == [True, True, False]  # minute
+    assert limit.allow("a", 61) and not limit.allow("a", 200)  # day: 3 used
+    assert limit.allow("b", 200)  # per client
+    assert limit.allow("a", 86400 + 1)  # the first hit left the day window
