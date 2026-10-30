@@ -44,7 +44,7 @@ select { font: inherit; padding: 6px 8px; border-radius: 6px; border: 1px solid 
 .stat b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; }
 .stat small { color: var(--muted); font-size: 12px; }
 .main { display: grid; grid-template-columns: 290px 1fr; gap: 18px; padding-bottom: 40px; }
-.list { background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+.list { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
   max-height: 78vh; overflow: auto; }
 .case { display: block; width: 100%; text-align: left; font: inherit; color: inherit; background: none;
   border: 0; border-bottom: 1px solid var(--line); padding: 9px 12px; cursor: pointer; }
@@ -61,7 +61,37 @@ select { font: inherit; padding: 6px 8px; border-radius: 6px; border: 1px solid 
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; min-width: 0; }
 .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 0 0 10px; }
 .card h2 em { font-style: normal; text-transform: none; letter-spacing: 0; }
-.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.run-bar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-top: 12px; }
+.btn { font: inherit; font-size: 14px; font-weight: 600; padding: 6px 14px; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--accent); background: var(--accent); color: var(--bg); }
+.btn.ghost { background: none; color: var(--accent); }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.step { padding: 10px 16px; opacity: 0.45; transition: opacity 0.3s; }
+.step.active, .step.open { opacity: 1; }
+.step.skip { opacity: 0.6; }
+.step-head { display: flex; gap: 10px; align-items: center; }
+.dot { flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center;
+  font-size: 12px; font-weight: 700; border: 2px solid var(--line); color: var(--muted); }
+.step.active .dot { border-color: var(--accent); color: var(--accent); animation: pulse 0.8s infinite alternate; }
+.step.ok .dot { background: var(--ok); border-color: var(--ok); color: var(--bg); }
+.step.route .dot, .step.fail .dot { background: var(--bad); border-color: var(--bad); color: var(--bg); }
+.step.skip .dot { border-style: dashed; }
+@keyframes pulse { to { box-shadow: 0 0 0 5px var(--accent-soft); } }
+.step-body { display: none; margin: 10px 0 4px 34px; min-width: 0; }
+.step.open .step-body { display: block; }
+.step-body p { margin: 0 0 8px; }
+.typed { font-size: 15px; min-height: 1.5em; }
+.step.active .typed::after { content: "▍"; color: var(--accent); }
+.check { opacity: 0; transition: opacity 0.2s; }
+.check.shown { opacity: 1; }
+.bar-row { display: grid; grid-template-columns: minmax(0, 220px) 1fr 52px; gap: 10px; align-items: center;
+  font: 13px var(--mono); margin: 4px 0; }
+.bar-row span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.track { height: 10px; background: var(--bg); border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
+.track span { display: block; height: 100%; background: var(--accent); }
+.bar-row small { color: var(--muted); text-align: right; }
+.pill { display: inline-block; font: 13px var(--mono); background: var(--accent-soft); border-radius: 4px; padding: 2px 8px; }
+@media (prefers-reduced-motion: reduce) { .step, .check { transition: none; } .step.active .dot { animation: none; } }
 pre { margin: 0; font: 13px/1.5 var(--mono); white-space: pre-wrap; word-break: break-word; }
 .letter { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; }
 .letter mark { background: var(--accent-soft); color: inherit; border-radius: 3px; padding: 1px 0; }
@@ -78,7 +108,9 @@ pre { margin: 0; font: 13px/1.5 var(--mono); white-space: pre-wrap; word-break: 
 .muted { color: var(--muted); font-size: 13px; }
 footer { border-top: 1px solid var(--line); padding: 18px 0 28px; font-size: 13px; color: var(--muted); }
 @media (max-width: 860px) {
-  .main, .cols { grid-template-columns: 1fr; }
+  .main { grid-template-columns: 1fr; }
+  .bar-row { grid-template-columns: minmax(0, 1fr) 70px 46px; }
+  .step-body { margin-left: 0; }
   .list { max-height: 260px; }
 }
 </style>
@@ -102,7 +134,7 @@ footer { border-top: 1px solid var(--line); padding: 18px 0 28px; font-size: 13p
       <span>Fixed legal template</span><i>or</i>
       <span>Human review queue</span>
     </div>
-    <p class="note">These are the real, unedited outputs of recorded eval runs: 50 cases, including prompt-injection and proxy-bait attacks. Simplified, not legal advice. Public Home Credit data, synthetic applicant IDs and a fictional creditor.</p>
+    <p class="note">Pick any of the 50 eval cases, including prompt-injection and proxy-bait attacks, and watch its recorded run go through the pipeline step by step. Every output shown is real and unedited. Simplified, not legal advice. Public Home Credit data, synthetic applicant IDs and a fictional creditor.</p>
   </div>
 </header>
 
@@ -183,7 +215,9 @@ function renderList() {
       <span class="id">${esc(r.case_id)}</span><span class="tag ${r.output.outcome}">${r.output.outcome}</span>
       <span class="desc">${esc(r.description)}</span>
     </button>`).join("");
-  $("list").querySelector('[aria-current="true"]')?.scrollIntoView({ block: "nearest" });
+  const cur = $("list").querySelector('[aria-current="true"]');  // scroll the list only, never the page
+  if (cur && (cur.offsetTop < $("list").scrollTop || cur.offsetTop > $("list").scrollTop + $("list").clientHeight - cur.offsetHeight))
+    $("list").scrollTop = cur.offsetTop - $("list").clientHeight / 3;
 }
 
 function compactJson(input) {
@@ -197,43 +231,95 @@ function letterHtml(notice, paragraph) {
   return p && safe.includes(p) ? safe.replace(p, `<mark>${p}</mark>`) : safe;
 }
 
-function renderDetail() {
-  const r = state.rows.find((x) => x.case_id === state.id);
-  if (!r) { $("detail").innerHTML = '<p class="muted">No cases in this group.</p>'; return; }
-  const c = r.case, o = r.output, noLlm = o.llm_calls === 0;
-  const input = { product: c.product, reasons: (c.reasons || []).map((x) => ({ rank: x?.rank, feature: x?.feature })), applicant_note: c.applicant_note };
+// Each case replays as the pipeline's steps, in order, using the recorded run's real outputs.
+function steps(r) {
+  const c = r.case, o = r.output, routed = o.llm_calls === 0;
+  const reasons = Array.isArray(c.reasons) ? c.reasons : [];
+  const score = (x) => (typeof x?.impact_score === "number" ? x.impact_score : NaN);
+  const top = Math.max(...reasons.map((x) => score(x) || 0), 0.0001);
+  const bars = reasons.map((x) => {
+    const s = score(x);
+    return `<div class="bar-row"><span>${esc(x?.rank)}. ${esc(x?.feature ?? "null")}</span>
+      <span class="track"><span style="width:${Number.isFinite(s) ? (100 * s) / top : 0}%"></span></span>
+      <small>${Number.isFinite(s) ? s.toFixed(3) : esc(x?.impact_score ?? "missing")}</small></div>`;
+  }).join("") || '<p class="muted">No reasons in the case data.</p>';
+  const input = { product: c.product, reasons: reasons.map((x) => ({ rank: x?.rank, feature: x?.feature })), applicant_note: c.applicant_note };
+  const skipped = { status: "skip", body: '<p class="muted">Skipped: the case went to a person before any LLM call.</p>' };
   const checks = (o.checks || []).map((k) => `
-    <li><span class="icon ${k.passed ? "pass" : "fail"}">${k.passed ? "✓" : "✗"}</span>
+    <li class="check"><span class="icon ${k.passed ? "pass" : "fail"}">${k.passed ? "✓" : "✗"}</span>
     <span>${esc(CHECKS[k.name] || k.name)}${k.detail ? `<small>${esc(k.detail)}</small>` : ""}</span></li>`).join("");
   const outcome = o.outcome === "escalated"
-    ? `<div class="esc"><b>Sent to the human review queue.</b> No letter goes to the applicant.<br>${esc(o.escalation_reason)}</div>`
+    ? `<div class="esc"><b>Sent to the human review queue.</b> No letter goes to the applicant; a reviewer edits and approves it (the edit re-runs all seven checks) or handles it outside the Copilot.<br>${esc(o.escalation_reason)}</div>`
     : `<pre class="letter">${letterHtml(o.notice, o.draft?.paragraph)}</pre>
-       <p class="muted">Highlighted: the only part the LLM wrote. The template supplies everything else.${o.outcome === "revised" ? " The first draft failed a fixable check, so the agent revised it once." : ""}</p>`;
-  const meta = noLlm ? "<span><b>No LLM call</b></span>" : `
-    <span>LLM calls <b>${o.llm_calls}</b></span>
-    <span>Cost <b>$${o.cost_usd.toFixed(5)}</b></span>
-    <span>Latency <b>${(o.latency_ms / 1000).toFixed(1)} s</b></span>
-    ${o.retrieved?.length ? `<span>Reg B sections retrieved <b>${o.retrieved.map(esc).join(", ")}</b></span>` : ""}
-    ${r.clarity != null ? `<span>Clarity (judge) <b>${r.clarity} / 5</b></span>` : ""}`;
+       <p class="muted">Highlighted: the only part the LLM wrote. The fixed template supplies the action taken, the ECOA notice and the contact details.</p>
+       ${r.clarity_rationale ? `<p class="muted"><b>LLM judge, clarity ${r.clarity}/5:</b> ${esc(r.clarity_rationale)}</p>` : ""}`;
+  return [
+    { title: `CreditShield decides: ${esc(c.decision)}`, status: "ok",
+      body: `<p class="muted">The credit model makes the decision and ranks the top SHAP reasons. The Copilot can't change either.</p>${bars}` },
+    routed
+      ? { title: "Routing: straight to a person", status: "route", body: `<p>${esc(o.escalation_reason)}</p>` }
+      : { title: "Routing: a denial with reasons the Copilot may word", status: "ok", body: '<p class="muted">Only DENY gets a letter. MANUAL_REVIEW, invalid case data and a <code>cnt_children</code> reason go to a person instead.</p>' },
+    routed ? { title: "Input allow-list and Presidio masking", ...skipped } : { title: "Input allow-list and Presidio masking", status: "ok",
+      body: `<pre>${esc(compactJson(input))}</pre><p class="muted">This is all the LLM receives. The applicant ID and SHAP impact scores are dropped; the case never contains the score, cutoff, feature values or age. Presidio masks personal data in the note.</p>` },
+    routed ? { title: "Regulation B lookup (pgvector)", ...skipped } : { title: "Regulation B lookup (pgvector)", status: "ok",
+      body: `<p>${(o.retrieved || []).map((s) => `<span class="pill">§${esc(s)}</span>`).join(" ") || '<span class="muted">No sections retrieved.</span>'}</p>` },
+    routed ? { title: `LLM drafts the reasons (prompt ${state.version})`, ...skipped } : { title: `LLM drafts the reasons (prompt ${state.version})`, status: "ok", type: o.draft?.paragraph || "",
+      body: `<p class="typed"></p><div class="meta"><span>Model <b>${esc(o.model)}</b></span><span>LLM calls <b>${o.llm_calls}</b></span><span>Tokens <b>${o.prompt_tokens} in · ${o.completion_tokens} out</b></span><span>Cost <b>$${o.cost_usd.toFixed(5)}</b></span></div>${o.outcome === "revised" ? '<p class="muted">The first draft failed a fixable check (wording or reading level), so the agent revised it once.</p>' : ""}` },
+    routed ? { title: "Seven checks in code", ...skipped } : { title: "Seven checks in code", status: (o.checks || []).every((k) => k.passed) ? "ok" : "fail",
+      body: `<ul class="checks">${checks}</ul>` },
+    { title: o.outcome === "escalated" ? "Outcome: human review queue" : "Outcome: notice sent", status: o.outcome === "escalated" ? "route" : "ok", body: outcome },
+  ];
+}
+
+let runId = 0, interacted = false;  // follow the run by scrolling only after the visitor clicks something
+document.addEventListener("click", () => { interacted = true; }, { capture: true });
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const wait = (ms, id) => new Promise((res, rej) => setTimeout(() => (id === runId ? res() : rej()), reduced ? 0 : ms));
+
+async function play(list, id) {
+  const els = [...$("detail").querySelectorAll(".step")];
+  for (const [i, s] of list.entries()) {
+    const el = els[i];
+    el.classList.add("active");
+    if (interacted) el.scrollIntoView({ block: "nearest", behavior: reduced ? "auto" : "smooth" });
+    await wait(s.status === "skip" ? 250 : 650, id);
+    el.classList.remove("active"); el.classList.add("open", s.status);
+    if (s.type) {
+      const p = el.querySelector(".typed"), words = s.type.split(" ");
+      for (let w = 1; w <= words.length; w++) { p.textContent = words.slice(0, w).join(" "); await wait(28, id); }
+    }
+    for (const li of el.querySelectorAll(".check")) { li.classList.add("shown"); await wait(170, id); }
+  }
+  $("detail").querySelector(".run-status").textContent = "Replay finished.";
+}
+
+function renderDetail(animate = true) {
+  const id = ++runId;
+  const r = state.rows.find((x) => x.case_id === state.id);
+  if (!r) { $("detail").innerHTML = '<p class="muted">No cases in this group.</p>'; return; }
+  const c = r.case, o = r.output, list = steps(r);
+  const real = o.llm_calls === 0 ? "No LLM call." : `Real run: ${(o.latency_ms / 1000).toFixed(1)} s, $${o.cost_usd.toFixed(5)}. Replayed here faster.`;
   $("detail").innerHTML = `
     <div class="card">
-      <h2><em>${esc(r.case_id)} · ${esc(GROUPS[r.group])}${r.synthetic ? " · synthetic case" : ""} · applicant #${esc(c.applicant_id)} · ${esc(c.decision)}</em></h2>
+      <h2><em>${esc(r.case_id)} · ${esc(GROUPS[r.group])}${r.synthetic ? " · synthetic case" : ""} · applicant #${esc(c.applicant_id)}</em></h2>
       <div>${esc(r.description)}</div>
       ${c.applicant_note ? `<p class="quote"><b>Applicant note:</b> ${esc(c.applicant_note)}</p>` : ""}
-      <div class="meta" style="margin-top:10px">${meta}</div>
+      <div class="run-bar"><button class="btn" data-act="replay">▶ Replay</button><button class="btn ghost" data-act="all">Show all steps</button>
+        <span class="muted run-status">${real}</span></div>
     </div>
-    <div class="cols">
-      <div class="card"><h2>What the LLM saw</h2>
-        ${noLlm ? '<p class="muted">Nothing. This case is routed to a person before any LLM call.</p>'
-          : `<pre>${esc(compactJson(input))}</pre><p class="muted">Allow-listed fields only: no score, cutoff, feature values or age. Presidio masks personal data in the note first.</p>`}
-      </div>
-      <div class="card"><h2>Seven checks in code</h2>
-        ${checks ? `<ul class="checks">${checks}</ul>` : '<p class="muted">Not run: there is no draft to check.</p>'}
-      </div>
-    </div>
-    <div class="card"><h2>Outcome</h2>${outcome}
-      ${r.clarity_rationale ? `<p class="muted"><b>Judge:</b> ${esc(r.clarity_rationale)}</p>` : ""}
-    </div>`;
+    <ol class="steps">${list.map((s, i) => `
+      <li class="step card"><div class="step-head"><span class="dot">${i + 1}</span><b>${s.title}</b></div>
+        <div class="step-body">${s.body}</div></li>`).join("")}</ol>`;
+  if (!animate) {
+    $("detail").querySelectorAll(".step").forEach((el, i) => {
+      el.classList.add("open", list[i].status);
+      const p = el.querySelector(".typed"); if (p) p.textContent = list[i].type;
+      el.querySelectorAll(".check").forEach((li) => li.classList.add("shown"));
+    });
+    $("detail").querySelector(".run-status").textContent = real;
+    return;
+  }
+  play(list, id).catch(() => {});
 }
 
 function render() { renderStats(); renderList(); renderDetail(); }
@@ -248,8 +334,13 @@ $("groups").addEventListener("click", (e) => {
 });
 $("list").addEventListener("click", (e) => {
   const b = e.target.closest(".case"); if (!b) return;
-  state.id = b.dataset.id; history.replaceState(null, "", "#" + state.id); renderList(); renderDetail();
-  if (window.innerWidth <= 860) $("detail").scrollIntoView({ behavior: "smooth" });
+  state.id = b.dataset.id; history.replaceState(null, "", "#" + state.id); renderList();
+  if (window.innerWidth <= 860) $("detail").scrollIntoView();
+  renderDetail();
+});
+$("detail").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-act]"); if (!b) return;
+  renderDetail(b.dataset.act === "replay");
 });
 $("version").addEventListener("change", async (e) => {
   state.version = e.target.value; state.rows = await load(state.version); render();
