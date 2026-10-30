@@ -64,7 +64,7 @@ class Settings(BaseSettings):
     # Optional: alerts from `make monitor` are also POSTed here as JSON (e.g. a Slack webhook).
     alert_webhook_url: SecretStr | None = None
 
-    # Public demo (the Hugging Face Space): POST /demo/notices needs no API key, accepts only
+    # Public demo (demo/ on Cloud Run): POST /demo/notices needs no API key, accepts only
     # the eval cases (plus an optional applicant note) and is rate-limited per client IP.
     # Off by default; the demo deployment also sets DAILY_BUDGET_USD.
     demo_enabled: bool = False

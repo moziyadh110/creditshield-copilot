@@ -1,5 +1,5 @@
 #!/bin/sh
-# Boot the demo container. Everything is rebuilt on each start (the Space's disk is not kept):
+# Boot the demo container. Everything is rebuilt on each start (Cloud Run keeps no disk):
 # Postgres, migrations, prompt registration (v1 becomes @production) and the Reg B index.
 set -e
 export PGDATA=/home/user/pgdata

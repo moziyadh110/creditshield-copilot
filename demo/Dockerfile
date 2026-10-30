@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
-# The live demo as one container for a Hugging Face Space (Docker SDK): a throwaway Postgres
-# with pgvector, MLflow on SQLite, and the Copilot API with the public /demo route on 7860.
-# Copy this file and README.md into the Space; it builds the GitHub repo's main branch.
+# The live demo as one container (Google Cloud Run; see deploy.sh): a throwaway Postgres with
+# pgvector, MLflow on SQLite, and the Copilot API with the public /demo route on 7860.
+# It builds the GitHub repo's main branch, so the build context is this folder only.
 
 FROM pgvector/pgvector:pg17
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
@@ -28,4 +28,4 @@ ENV PATH=/app/.venv/bin:/usr/lib/postgresql/17/bin:$PATH \
     DEMO_ENABLED=true \
     DAILY_BUDGET_USD=0.10
 EXPOSE 7860
-CMD ["sh", "space/start.sh"]
+CMD ["sh", "demo/start.sh"]

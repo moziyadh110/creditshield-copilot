@@ -32,7 +32,7 @@ class DemoResult(BaseModel):
 
 
 def _client(request: Request) -> str:
-    # Behind the Space's proxy the client is the first X-Forwarded-For entry. It can be forged,
+    # Behind Cloud Run's proxy the client is the first X-Forwarded-For entry. It can be forged,
     # which only dodges this limit: DAILY_BUDGET_USD still caps the spend.
     forwarded = request.headers.get("x-forwarded-for")
     return forwarded.split(",")[0].strip() if forwarded else (request.client or ("?",))[0]
@@ -40,7 +40,7 @@ def _client(request: Request) -> str:
 
 @site.get("/", include_in_schema=False)
 async def to_site():
-    """The Space's own page: send visitors to the demo site."""
+    """The backend's own address: send visitors to the demo site."""
     return RedirectResponse(get_settings().demo_site_url)
 
 
