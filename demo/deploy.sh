@@ -20,6 +20,8 @@ gcloud secrets add-iam-policy-binding deepseek-api-key --quiet > /dev/null \
     --member="serviceAccount:$NUMBER-compute@developer.gserviceaccount.com" \
     --role=roles/secretmanager.secretAccessor
 
+gcloud config set builds/timeout 1800  # the image is ~3.5 GB (CPU PyTorch); allow 30 minutes
+
 # One instance at most (the rate limiter and the database live in it), none while idle.
 gcloud run deploy creditshield-demo --source . --region "$REGION" --quiet \
     --allow-unauthenticated --port 7860 --memory 2Gi --cpu 1 --cpu-boost \
