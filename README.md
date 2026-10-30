@@ -15,7 +15,11 @@ writes the reasons part of that letter for every denial from
 - seven checks in code must pass before anything is sent,
 - anything that fails, or that the system shouldn't word at all, goes to a human review queue.
 
-<!-- ![Demo: one notice sent, one case escalated and handled on the review page](docs/demo.gif) -->
+**[Open the live demo](https://moziyadh110.github.io/creditshield-copilot/)**: browse all 50
+recorded eval cases for each prompt version. For every case you see what the LLM was given,
+the seven checks, and the letter that was sent or why it went to a person. No install needed.
+
+[![Demo page: a prompt-injection case, the allow-listed input the LLM saw and the seven checks it passed](docs/demo.png)](https://moziyadh110.github.io/creditshield-copilot/#injection-01)
 
 > **Simplified, not legal advice.** A portfolio project on the public Home Credit dataset,
 > with synthetic applicant IDs and a fictional creditor. It has had no compliance review.
